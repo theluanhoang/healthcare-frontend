@@ -1,31 +1,32 @@
-import React from 'react'
 import { Route, Routes } from 'react-router-dom'
-import Register from '../pages/Register'
-import Login from '../pages/Login'
 import About from '../pages/About'
-import Features from '../pages/Features.JSX'
+import Admin from '../pages/admin/Admin'
 import Contact from '../pages/Contact'
-import PatientProfile from '../pages/PatientProfile'
-import PatientAppointments from '../pages/PatientAppointments'
-import PatientShare from '../pages/PatientShare'
+import DoctorAnalysis from '../pages/DoctorAnalysis'
 import DoctorPatients from '../pages/DoctorPatients'
 import DoctorSchedule from '../pages/DoctorSchedule'
-import DoctorAnalysis from '../pages/DoctorAnalysis'
+import Features from '../pages/Features'
+import Login from '../pages/Login'
+import PatientAppointments from '../pages/PatientAppointments'
+import PatientProfile from '../pages/PatientProfile'
+import PatientShare from '../pages/PatientShare'
+import Register from '../pages/Register'
 
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/admin" element={<Admin />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/About" element={<About />} />
-      <Route path="/Features" element={<Features />} />
-      <Route path="/Contact" element={<Contact />} />
-      <Route path="/patientProfile" element={<PatientProfile />} />
-      <Route path="/patientAppointment" element={<PatientAppointments />} />
-      <Route path="/patientShare" element={<PatientShare />} />
-      <Route path="/doctorPatients" element={<DoctorPatients/>} />
-      <Route path="/DoctorSchedule" element={<DoctorSchedule/>} />
-      <Route path="/doctoranalysis" element={<DoctorAnalysis/>} />
+      <Route path="/about" element={<About />} />
+      <Route path="/features" element={<Features />} />
+      <Route path="/contact" element={<Contact />} />
+      <Route path="/patient/profile" element={<PatientProfile />} />
+      <Route path="/patient/appointment" element={<PatientAppointments />} />
+      <Route path="/patient/share" element={<PatientShare />} />
+      <Route path="/doctor/patients" element={<DoctorPatients/>} />
+      <Route path="/doctor/schedule" element={<DoctorSchedule/>} />
+      <Route path="/doctor/analysis" element={<DoctorAnalysis/>} />
     </Routes>
   )
 }

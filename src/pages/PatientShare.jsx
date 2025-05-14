@@ -1,8 +1,8 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Link } from "react-router-dom";
+import { z } from "zod";
 import { useAuthStore } from "../stores/useAuthStore";
 
 // Tạo schema với Zod
@@ -90,7 +90,7 @@ function PatientShare() {
               <ul className="space-y-4">
                 <li>
                   <Link
-                    to="/patientProfile"
+                    to="/patient/profile"
                     className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
                   >
                     Hồ sơ
@@ -98,7 +98,7 @@ function PatientShare() {
                 </li>
                 <li>
                   <Link
-                    to="/patientappointment"
+                    to="/patient/appointment"
                     className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
                   >
                     Lịch hẹn
@@ -106,7 +106,7 @@ function PatientShare() {
                 </li>
                 <li>
                   <Link
-                    to="/patientshare"
+                    to="/patient/share"
                     className="block py-2 px-4 text-indigo-600 font-semibold bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-200"
                   >
                     Chia sẻ dữ liệu

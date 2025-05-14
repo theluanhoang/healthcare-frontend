@@ -1,19 +1,19 @@
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Link } from "react-router-dom";
-import { useAuthStore } from "../stores/useAuthStore";
-import { Bar } from "react-chartjs-2";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
   BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Legend,
+  LinearScale,
   Title,
   Tooltip,
-  Legend,
 } from "chart.js";
+import React, { useState } from "react";
+import { Bar } from "react-chartjs-2";
+import { useForm } from "react-hook-form";
+import { Link } from "react-router-dom";
+import { z } from "zod";
+import { useAuthStore } from "../stores/useAuthStore";
 
 // Đăng ký các thành phần cần thiết cho Chart.js
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -132,7 +132,7 @@ function DoctorAnalysis() {
               <ul className="space-y-4">
                 <li>
                   <Link
-                    to="/doctorpatients"
+                    to="/doctor/patients"
                     className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
                   >
                     Bệnh nhân
@@ -140,7 +140,7 @@ function DoctorAnalysis() {
                 </li>
                 <li>
                   <Link
-                    to="/doctorschedule"
+                    to="/doctor/schedule"
                     className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
                   >
                     Lịch khám
@@ -148,7 +148,7 @@ function DoctorAnalysis() {
                 </li>
                 <li>
                   <Link
-                    to="/doctoranalysis"
+                    to="/doctor/analysis"
                     className="block py-2 px-4 text-indigo-600 font-semibold bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-200"
                   >
                     Phân tích

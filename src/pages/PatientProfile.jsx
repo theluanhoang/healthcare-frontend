@@ -1,33 +1,48 @@
-import React from "react";
-import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
-import { useAuthStore } from "../stores/useAuthStore";
-
-// Tạo schema với Zod
-const profileSchema = z.object({
-  fullName: z.string().min(1, "Họ tên không được để trống"),
-  email: z.string().email("Email không hợp lệ").nonempty("Email không được để trống"),
-});
+import { useSmartContract } from "../hooks";
+import { profileSchema } from "../types";
 
 function PatientProfile() {
-  const { walletAddress, role, setWallet } = useAuthStore();
+  const { walletAddress, getUser } = useSmartContract();
+  const [userInfo, setUserInfo] = useState(null);
+
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    setValue
   } = useForm({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      fullName: "Nguyễn Văn A", // Giả lập dữ liệu, thay bằng API thực tế
-      email: "nguyenvana@example.com", // Giả lập dữ liệu
+      fullName: userInfo ? userInfo.fullName : "", 
+      email: userInfo ? userInfo.email : "",
     },
   });
 
+    useEffect(() => {
+    const fetchGetUser = async () => {
+      const userRes = await getUser(walletAddress);
+      setValue("fullName", userRes ? userRes.fullName : "");
+      setValue("email", userRes ? userRes.email : "");
+      setUserInfo(userRes);
+    }
+        
+    fetchGetUser();
+  }, [getUser, walletAddress, setValue]);
+  const getRole = (role) => {
+    if (role == 1) {
+      return "Bệnh nhân";
+    } else  if (role == 2) {
+      return "Bác sĩ";
+    }
+
+    return "";
+  }
   const onSubmit = (data) => {
-    console.log("Profile updated:", data);
     // TODO: Gửi dữ liệu cập nhật đến backend hoặc blockchain
     reset(data); // Giữ lại dữ liệu sau khi submit
   };
@@ -51,17 +66,15 @@ function PatientProfile() {
         </div>
       </section>
 
-      {/* Profile Content */}
       <section className="py-16">
         <div className="container mx-auto px-6">
           <div className="flex flex-col lg:flex-row gap-8">
-            {/* Sidebar Navigation */}
             <div className="lg:w-1/4 bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-6">Điều hướng</h2>
               <ul className="space-y-4">
                 <li>
                   <Link
-                    to="/patientprofile"
+                    to="/patient/profile"
                     className="block py-2 px-4 text-indigo-600 font-semibold bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-200"
                   >
                     Hồ sơ
@@ -69,7 +82,7 @@ function PatientProfile() {
                 </li>
                 <li>
                   <Link
-                    to="/patientAppointment"
+                    to="/patient/appointment"
                     className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
                   >
                     Lịch hẹn
@@ -77,7 +90,7 @@ function PatientProfile() {
                 </li>
                 <li>
                   <Link
-                    to="/patientshare"
+                    to="/patient/share"
                     className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
                   >
                     Chia sẻ dữ liệu
@@ -86,7 +99,6 @@ function PatientProfile() {
               </ul>
             </div>
 
-            {/* Profile Form */}
             <div className="lg:w-3/4 bg-white rounded-xl shadow-lg p-8">
               <h2 className="text-2xl font-bold text-gray-800 mb-6">
                 Thông tin cá nhân
@@ -96,7 +108,7 @@ function PatientProfile() {
                 <p className="text-sm font-mono text-gray-600 bg-gray-100 px-3 py-2 rounded-full mt-2">
                   {walletAddress || "Chưa kết nối ví"}
                 </p>
-                <p className="text-sm text-gray-600 mt-2">Vai trò: {role || "Bệnh nhân"}</p>
+                <p className="text-sm text-gray-600 mt-2">Vai trò: {userInfo ? getRole(userInfo.role) : "Bệnh nhân"}</p>
               </div>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
                 <div>

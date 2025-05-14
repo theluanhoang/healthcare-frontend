@@ -1,69 +1,77 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ethers } from "ethers";
-import React, { useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
-
-const schema = z.object({
-  fullName: z.string().min(1, "Họ tên không được bỏ trống"),
-  email: z.string().email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
-  role: z.enum(["patient", "doctor", "admin"]),
-});
-
+import { toast } from "react-toastify";
+import { useSmartContract } from "../hooks";
+import useIpfs from "../hooks/useIPFS";
+import { registerSchema } from "../types";
 function Register() {
-  const [walletAddress, setWalletAddress] = useState("");
-  const [showAlert, setShowAlert] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { uploadFile } = useIpfs();
+  const { connectWallet, walletAddress, contract, signer } = useSmartContract();
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(registerSchema),
     defaultValues: {
       fullName: "",
       email: "",
       password: "",
-      role: "patient",
+      role: "PATIENT",
+      certificate: undefined,
     },
   });
 
-  const connectWallet = async () => {
-    if (typeof window.ethereum === "undefined") {
-      alert("Vui lòng cài đặt MetaMask để tiếp tục.");
-      return;
-    }
-
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      const signer = await provider.getSigner();
-      const address = await signer.getAddress();
-      setWalletAddress(address);
-    } catch (err) {
-      console.error("Lỗi kết nối ví:", err);
-    }
-  };
+  const selectedRole = watch("role");
 
   const onSubmit = async (data) => {
     if (!walletAddress) {
-      alert("Vui lòng kết nối ví MetaMask trước khi đăng ký.");
+      toast.error("Vui lòng kết nối ví MetaMask trước khi đăng ký.");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const newUser = {
-        ...data,
-        wallet: walletAddress,
-      };
+      await signer.signMessage(
+        `Register to Healthcare System at ${Date.now()}`
+      );
 
-      console.log("Thông tin đăng ký:", newUser);
-      setShowAlert(true);
+      let ipfsHashNew = "";
+      if (data.certificate && selectedRole === "DOCTOR") {
+        const file = data.certificate[0];
+        if (!file) {
+          throw new Error("Cần chọn một tệp chứng chỉ.");
+        }
+
+        ipfsHashNew = await uploadFile(file);
+        if (!ipfsHashNew) {
+          throw new Error("Không thể lấy CID từ IPFS.");
+        }
+      }
+
+      const roleEnum =
+        data.role === "PATIENT" ? 1 : data.role === "DOCTOR" ? 2 : null;
+      if (roleEnum === null) {
+        throw new Error("Vai trò không hợp lệ: " + data.role);
+      }
+      console.log("data.fullName, data.email, roleEnum, ipfsHashNew::::", data.fullName, data.email, roleEnum, ipfsHashNew);
+      
+      const tx = await contract.register(data.fullName, data.email, roleEnum, ipfsHashNew, {
+        gasLimit: 500000,
+      });
+      await tx.wait();
+      toast.success(
+        `Đăng ký thành công! ${
+          data.role === "DOCTOR" ? "Vui lòng chờ xác minh." : ""
+        }`
+      );
     } catch (err) {
+      toast.error("Lỗi đăng ký:", err.message);
       console.error("Lỗi đăng ký:", err);
     } finally {
       setIsLoading(false);
@@ -77,27 +85,35 @@ function Register() {
           Đăng ký
         </h2>
 
-        {showAlert && (
-          <div className="mb-6 p-4 bg-green-50 text-green-700 rounded-lg flex items-center space-x-2 animate-slide-down">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Đăng ký thành công!</span>
-          </div>
-        )}
-
         {Object.keys(errors).length > 0 && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg flex items-center space-x-2 animate-slide-down">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
             <span>Vui lòng kiểm tra lại thông tin.</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-6"
+          noValidate
+        >
           <div>
-            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="fullName"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Họ tên
             </label>
             <input
@@ -108,12 +124,17 @@ function Register() {
               className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
             />
             {errors.fullName && (
-              <p className="text-red-500 text-sm mt-1">{errors.fullName.message}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.fullName.message}
+              </p>
             )}
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Email
             </label>
             <input
@@ -124,12 +145,17 @@ function Register() {
               className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
             />
             {errors.email && (
-              <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.email.message}
+              </p>
             )}
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Mật khẩu
             </label>
             <input
@@ -140,12 +166,17 @@ function Register() {
               className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
             />
             {errors.password && (
-              <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.password.message}
+              </p>
             )}
           </div>
 
           <div>
-            <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="role"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Vai trò
             </label>
             <select
@@ -153,11 +184,28 @@ function Register() {
               {...register("role")}
               className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
             >
-              <option value="patient">Bệnh nhân</option>
-              <option value="doctor">Bác sĩ</option>
-              <option value="admin">Quản trị viên</option>
+              <option value="PATIENT">Bệnh nhân</option>
+              <option value="DOCTOR">Bác sĩ</option>
             </select>
           </div>
+
+          {selectedRole === "DOCTOR" && (
+            <div>
+              <label
+                htmlFor="certificate"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Chứng chỉ (PDF, JPEG, PNG)
+              </label>
+              <input
+                id="certificate"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                {...register("certificate")}
+                className="mt-1 w-full p-2 border border-gray-300 rounded-md"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
