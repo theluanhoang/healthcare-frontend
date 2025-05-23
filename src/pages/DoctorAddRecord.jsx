@@ -7,107 +7,63 @@ import { z } from "zod";
 import { useSmartContract } from "../hooks";
 import useIpfs from "../hooks/useIPFS";
 
-const recordSchema = z.object({
-  patient: z.string().min(1, "Vui lòng chọn bệnh nhân"),
-  visitDate: z.string().min(1, "Vui lòng chọn ngày khám"),
-  includeExamination: z.boolean(),
-  includeTestResult: z.boolean(),
-  includePrescription: z.boolean(),
-  examination: z
-    .object({
-      symptoms: z.string().min(1, "Vui lòng nhập triệu chứng"),
-      diagnosis: z.string().min(1, "Vui lòng nhập chẩn đoán"),
-      notes: z.string().optional(),
-    })
-    .optional(),
-  testResult: z
-    .object({
-      testType: z.string().min(1, "Vui lòng nhập loại xét nghiệm"),
-      results: z.string().min(1, "Vui lòng nhập kết quả"),
-      comments: z.string().optional(),
-    })
-    .optional(),
-  prescription: z
-    .object({
-      medications: z
-        .array(
-          z.object({
-            name: z.string().min(1, "Vui lòng nhập tên thuốc"),
-            dosage: z.string().min(1, "Vui lòng nhập liều lượng"),
-            instructions: z.string().min(1, "Vui lòng nhập hướng dẫn"),
-          })
-        )
-        .min(1, "Vui lòng thêm ít nhất một loại thuốc"),
-      notes: z.string().optional(),
-    })
-    .optional(),
-}).superRefine((data, ctx) => {
-  // Validate examination if selected
-  if (data.includeExamination) {
-    if (!data.examination || !data.examination.symptoms || !data.examination.diagnosis) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Vui lòng điền đầy đủ triệu chứng và chẩn đoán",
-        path: ["examination"],
-      });
-    }
-  }
-
-  // Validate testResult only if includeTestResult is true
-  if (data.includeTestResult) {
-    if (!data.testResult || !data.testResult.testType || !data.testResult.results) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Vui lòng điền đầy đủ loại xét nghiệm và kết quả",
-        path: ["testResult"],
-      });
-    }
-  }
-
-  // Validate prescription only if includePrescription is true
-  if (data.includePrescription) {
-    if (!data.prescription || !data.prescription.medications || !data.prescription.medications.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Vui lòng thêm ít nhất một loại thuốc",
-        path: ["prescription.medications"],
-      });
-    } else {
-      data.prescription.medications.forEach((med, index) => {
-        if (!med.name) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Vui lòng nhập tên thuốc",
-            path: [`prescription.medications.${index}.name`],
-          });
-        }
-        if (!med.dosage) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Vui lòng nhập liều lượng",
-            path: [`prescription.medications.${index}.dosage`],
-          });
-        }
-        if (!med.instructions) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Vui lòng nhập hướng dẫn",
-            path: [`prescription.medications.${index}.instructions`],
-          });
-        }
-      });
-    }
-  }
-
-  // Require at least one record type
-  if (!data.includeExamination && !data.includeTestResult && !data.includePrescription) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Vui lòng chọn ít nhất một loại hồ sơ (khám bệnh, xét nghiệm, hoặc đơn thuốc)",
-      path: ["includeExamination"],
-    });
-  }
+const examinationSchema = z.object({
+  symptoms: z.string().min(1, "Vui lòng nhập triệu chứng"),
+  diagnosis: z.string().min(1, "Vui lòng nhập chẩn đoán"),
+  notes: z.string().optional(),
 });
+
+const testResultSchema = z.object({
+  testType: z.string().min(1, "Vui lòng nhập loại xét nghiệm"),
+  results: z.string().min(1, "Vui lòng nhập kết quả"),
+  comments: z.string().optional(),
+});
+
+const prescriptionSchema = z.object({
+  medications: z
+    .array(
+      z.object({
+        name: z.string().min(1, "Vui lòng nhập tên thuốc"),
+        dosage: z.string().min(1, "Vui lòng nhập liều lượng"),
+        instructions: z.string().min(1, "Vui lòng nhập hướng dẫn"),
+      })
+    )
+    .min(1, "Vui lòng thêm ít nhất một loại thuốc"),
+  notes: z.string().optional(),
+});
+
+const recordSchema = z
+  .object({
+    patient: z.string().min(1, "Vui lòng chọn bệnh nhân"),
+    visitDate: z.string().min(1, "Vui lòng chọn ngày khám"),
+    includeExamination: z.boolean(),
+    includeTestResult: z.boolean(),
+    includePrescription: z.boolean(),
+    examination: z.any().optional(),
+    testResult: z.any().optional(),
+    prescription: z.any().optional(),
+  })
+  .refine(
+    (data) => !data.includeExamination || examinationSchema.safeParse(data.examination).success,
+    {
+      message: "Vui lòng điền đầy đủ triệu chứng và chẩn đoán",
+      path: ["examination"],
+    }
+  )
+  .refine(
+    (data) => !data.includeTestResult || testResultSchema.safeParse(data.testResult).success,
+    {
+      message: "Vui lòng điền đầy đủ loại xét nghiệm và kết quả",
+      path: ["testResult"],
+    }
+  )
+  .refine(
+    (data) => !data.includePrescription || prescriptionSchema.safeParse(data.prescription).success,
+    {
+      message: "Vui lòng điền đầy đủ thông tin thuốc",
+      path: ["prescription.medications"],
+    }
+  );
 
 function DoctorAddRecord() {
   const {
@@ -131,6 +87,7 @@ function DoctorAddRecord() {
     reset,
     watch,
     control,
+    setValue,
   } = useForm({
     resolver: zodResolver(recordSchema),
     defaultValues: {
@@ -139,15 +96,16 @@ function DoctorAddRecord() {
       includeExamination: false,
       includeTestResult: false,
       includePrescription: false,
-      examination: { symptoms: "", diagnosis: "", notes: "" },
-      testResult: { testType: "", results: "", comments: "" },
-      prescription: { medications: [], notes: "" },
+      examination: undefined,
+      testResult: undefined,
+      prescription: undefined,
     },
   });
 
   const { fields, append, remove } = useFieldArray({
     control,
     name: "prescription.medications",
+    shouldUnregister: true,
   });
 
   const [includeExamination, includeTestResult, includePrescription] = watch([
@@ -155,6 +113,25 @@ function DoctorAddRecord() {
     "includeTestResult",
     "includePrescription",
   ]);
+
+  // Reset fields when checkboxes are toggled
+  useEffect(() => {
+    if (!includeExamination) {
+      setValue("examination", undefined);
+    } else if (!watch("examination")) {
+      setValue("examination", { symptoms: "", diagnosis: "", notes: "" });
+    }
+    if (!includeTestResult) {
+      setValue("testResult", undefined);
+    } else if (!watch("testResult")) {
+      setValue("testResult", { testType: "", results: "", comments: "" });
+    }
+    if (!includePrescription) {
+      setValue("prescription", undefined);
+    } else if (!watch("prescription")) {
+      setValue("prescription", { medications: [], notes: "" });
+    }
+  }, [includeExamination, includeTestResult, includePrescription, setValue, watch]);
 
   // Memoized init function
   const init = useCallback(async () => {
@@ -241,6 +218,12 @@ function DoctorAddRecord() {
         return;
       }
 
+      // Kiểm tra nếu không chọn component nào
+      if (!data.includeExamination && !data.includeTestResult && !data.includePrescription) {
+        toast.error("Vui lòng chọn ít nhất một loại hồ sơ để thêm.");
+        return;
+      }
+
       setUploading(true);
       try {
         // Gộp tất cả components vào một JSON duy nhất
@@ -252,21 +235,21 @@ function DoctorAddRecord() {
           records: [],
         };
 
-        if (data.includeExamination) {
+        if (data.includeExamination && data.examination) {
           combinedRecord.records.push({
             recordType: "EXAMINATION_RECORD",
             details: data.examination,
           });
         }
 
-        if (data.includeTestResult) {
+        if (data.includeTestResult && data.testResult) {
           combinedRecord.records.push({
             recordType: "TEST_RESULT",
             details: data.testResult,
           });
         }
 
-        if (data.includePrescription) {
+        if (data.includePrescription && data.prescription) {
           combinedRecord.records.push({
             recordType: "PRESCRIPTION",
             details: data.prescription,
@@ -431,9 +414,6 @@ function DoctorAddRecord() {
                       <ul className="list-disc ml-5">
                         {errors.patient && <li>{errors.patient.message}</li>}
                         {errors.visitDate && <li>{errors.visitDate.message}</li>}
-                        {errors.includeExamination && (
-                          <li>{errors.includeExamination.message}</li>
-                        )}
                         {errors.examination && (
                           <li>Lỗi hồ sơ khám bệnh: Vui lòng điền triệu chứng và chẩn đoán</li>
                         )}
@@ -524,9 +504,6 @@ function DoctorAddRecord() {
                         Đơn thuốc
                       </label>
                     </div>
-                    {errors.includeExamination && (
-                      <p className="text-red-500 text-sm mt-1">{errors.includeExamination.message}</p>
-                    )}
                   </div>
 
                   {includeExamination && (
