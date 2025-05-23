@@ -1,47 +1,106 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { useSmartContract } from "../hooks";
 import { profileSchema } from "../types";
+import { shortenAddress } from "../utils";
 
 function PatientProfile() {
-  const { walletAddress, getUser } = useSmartContract();
+  const { walletAddress, getUser, contract } = useSmartContract();
   const [userInfo, setUserInfo] = useState(null);
+  const listenerRef = useRef({ isActive: false, contractId: null });
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
-    setValue
+    setValue,
   } = useForm({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      fullName: userInfo ? userInfo.fullName : "", 
+      fullName: userInfo ? userInfo.fullName : "",
       email: userInfo ? userInfo.email : "",
     },
   });
 
-    useEffect(() => {
-    const fetchGetUser = async () => {
-      const userRes = await getUser(walletAddress);
-      setValue("fullName", userRes ? userRes.fullName : "");
-      setValue("email", userRes ? userRes.email : "");
-      setUserInfo(userRes);
-    }
-        
-    fetchGetUser();
-  }, [getUser, walletAddress, setValue]);
+  const navigate = useNavigate();
+
+  const fetchGetUser = useCallback(async () => {
+    const userRes = await getUser(walletAddress);
+    setValue("fullName", userRes ? userRes.fullName : "");
+    setValue("email", userRes ? userRes.email : "");
+    setUserInfo(userRes);
+  }, [walletAddress, getUser, setValue]);
+
+  useEffect(() => {
+    const initialize = async () => {
+      if (!contract || !walletAddress) {
+        toast.error("Hợp đồng hoặc ví chưa sẵn sàng.");
+        navigate("/");
+        return;
+      }
+
+      try {
+        await fetchGetUser();
+
+        if (contract && listenerRef.current.contractId !== contract) {
+          console.log(
+            "Cleaning up old listeners for contract:",
+            listenerRef.current.contractId
+          );
+          if (listenerRef.current.contractId) {
+            listenerRef.current.contractId.removeAllListeners("UserRegistered");
+
+            listenerRef.current.contractId.removeAllListeners("DoctorVerified");
+          }
+          listenerRef.current = { isActive: false, contractId: null };
+        }
+        if (!listenerRef.current.isActive) {
+          console.log("Attaching listeners for contract:", contract);
+          contract.on("DoctorVerified", (doctor, doctorName) => {
+            toast.success(
+              `Bác sĩ ${doctorName} (${shortenAddress(
+                doctor
+              )}) đã được xác minh!`
+            );
+          });
+          listenerRef.current = { isActive: true, contractId: contract };
+          console.log("Listeners attached, ref:", listenerRef.current);
+        }
+      } catch (err) {
+        toast.error(`Lỗi khởi tạo: ${err.message}`);
+        console.error("Lỗi khởi tạo:", err);
+      }
+    };
+
+    initialize();
+
+    return () => {
+      if (
+        contract &&
+        listenerRef.current.isActive &&
+        listenerRef.current.contractId === contract
+      ) {
+        console.log("Removing listeners for contract:", contract);
+        contract.removeAllListeners("UserRegistered");
+        contract.removeAllListeners("DoctorVerified");
+        listenerRef.current = { isActive: false, contractId: null };
+      }
+    };
+  }, [fetchGetUser, contract, walletAddress, navigate]);
+
   const getRole = (role) => {
     if (role == 1) {
       return "Bệnh nhân";
-    } else  if (role == 2) {
+    } else if (role == 2) {
       return "Bác sĩ";
     }
 
     return "";
-  }
+  };
   const onSubmit = (data) => {
     // TODO: Gửi dữ liệu cập nhật đến backend hoặc blockchain
     reset(data); // Giữ lại dữ liệu sau khi submit
@@ -70,7 +129,9 @@ function PatientProfile() {
         <div className="container mx-auto px-6">
           <div className="flex flex-col lg:flex-row gap-8">
             <div className="lg:w-1/4 bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-6">Điều hướng</h2>
+              <h2 className="text-xl font-bold text-gray-800 mb-6">
+                Điều hướng
+              </h2>
               <ul className="space-y-4">
                 <li>
                   <Link
@@ -104,15 +165,26 @@ function PatientProfile() {
                 Thông tin cá nhân
               </h2>
               <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-700">Địa chỉ ví</h3>
+                <h3 className="text-lg font-semibold text-gray-700">
+                  Địa chỉ ví
+                </h3>
                 <p className="text-sm font-mono text-gray-600 bg-gray-100 px-3 py-2 rounded-full mt-2">
                   {walletAddress || "Chưa kết nối ví"}
                 </p>
-                <p className="text-sm text-gray-600 mt-2">Vai trò: {userInfo ? getRole(userInfo.role) : "Bệnh nhân"}</p>
+                <p className="text-sm text-gray-600 mt-2">
+                  Vai trò: {userInfo ? getRole(userInfo.role) : "Bệnh nhân"}
+                </p>
               </div>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+              <form
+                onSubmit={handleSubmit(onSubmit)}
+                className="space-y-6"
+                noValidate
+              >
                 <div>
-                  <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="fullName"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Họ tên
                   </label>
                   <input
@@ -123,12 +195,17 @@ function PatientProfile() {
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-sm"
                   />
                   {errors.fullName && (
-                    <p className="text-red-500 text-sm mt-1">{errors.fullName.message}</p>
+                    <p className="text-red-500 text-sm mt-1">
+                      {errors.fullName.message}
+                    </p>
                   )}
                 </div>
 
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Email
                   </label>
                   <input
@@ -139,7 +216,9 @@ function PatientProfile() {
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-sm"
                   />
                   {errors.email && (
-                    <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+                    <p className="text-red-500 text-sm mt-1">
+                      {errors.email.message}
+                    </p>
                   )}
                 </div>
 

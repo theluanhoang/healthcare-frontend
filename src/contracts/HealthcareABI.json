@@ -10,46 +10,14 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "patient",
+          "name": "doctor",
           "type": "address"
         },
         {
-          "indexed": true,
-          "internalType": "address",
-          "name": "doctor",
-          "type": "address"
-        }
-      ],
-      "name": "AccessGranted",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "oldAdmin",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "newAdmin",
-          "type": "address"
-        }
-      ],
-      "name": "AdminTransferred",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "doctor",
-          "type": "address"
+          "indexed": false,
+          "internalType": "string",
+          "name": "fullName",
+          "type": "string"
         }
       ],
       "name": "DoctorVerified",
@@ -60,8 +28,20 @@
       "inputs": [
         {
           "indexed": true,
+          "internalType": "uint256",
+          "name": "recordIndex",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
           "internalType": "address",
           "name": "patient",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "doctor",
           "type": "address"
         },
         {
@@ -69,15 +49,59 @@
           "internalType": "string",
           "name": "ipfsHash",
           "type": "string"
+        }
+      ],
+      "name": "MedicalRecordAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "recordIndex",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "patient",
+          "type": "address"
+        }
+      ],
+      "name": "MedicalRecordApproved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "recordIndex",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "patient",
+          "type": "address"
         },
         {
           "indexed": true,
           "internalType": "address",
           "name": "doctor",
           "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "ipfsHash",
+          "type": "string"
         }
       ],
-      "name": "MedicalRecordAdded",
+      "name": "MedicalRecordShared",
       "type": "event"
     },
     {
@@ -98,7 +122,7 @@
         {
           "indexed": false,
           "internalType": "string",
-          "name": "ipfsHash",
+          "name": "fullName",
           "type": "string"
         }
       ],
@@ -106,53 +130,21 @@
       "type": "event"
     },
     {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "user",
-          "type": "address"
-        }
-      ],
-      "name": "UserRemoved",
-      "type": "event"
-    },
-    {
       "inputs": [
         {
           "internalType": "address",
-          "name": "",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "name": "accessList",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "patientAddress",
+          "name": "patient",
           "type": "address"
         },
         {
           "internalType": "string",
           "name": "ipfsHash",
           "type": "string"
+        },
+        {
+          "internalType": "enum Healthcare.RecordType",
+          "name": "recordType",
+          "type": "uint8"
         }
       ],
       "name": "addMedicalRecord",
@@ -161,35 +153,16 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "admin",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "patientAddress",
-          "type": "address"
+          "internalType": "uint256",
+          "name": "recordIndex",
+          "type": "uint256"
         }
       ],
-      "name": "getAccessList",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "",
-          "type": "address[]"
-        }
-      ],
-      "stateMutability": "view",
+      "name": "approveMedicalRecord",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -198,22 +171,22 @@
       "outputs": [
         {
           "internalType": "address[]",
-          "name": "addresses",
+          "name": "",
           "type": "address[]"
         },
         {
           "internalType": "bool[]",
-          "name": "isVerified",
+          "name": "",
           "type": "bool[]"
         },
         {
           "internalType": "string[]",
-          "name": "fullNames",
+          "name": "",
           "type": "string[]"
         },
         {
           "internalType": "string[]",
-          "name": "ipfsHashes",
+          "name": "",
           "type": "string[]"
         }
       ],
@@ -222,65 +195,14 @@
     },
     {
       "inputs": [],
-      "name": "getAllUsers",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "addresses",
-          "type": "address[]"
-        },
-        {
-          "components": [
-            {
-              "internalType": "enum Healthcare.Role",
-              "name": "role",
-              "type": "uint8"
-            },
-            {
-              "internalType": "bool",
-              "name": "isVerified",
-              "type": "bool"
-            },
-            {
-              "internalType": "string",
-              "name": "ipfsHash",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "fullName",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "email",
-              "type": "string"
-            }
-          ],
-          "internalType": "struct Healthcare.User[]",
-          "name": "userData",
-          "type": "tuple[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "patientAddress",
-          "type": "address"
-        }
-      ],
-      "name": "getMedicalRecords",
+      "name": "getAllMedicalRecords",
       "outputs": [
         {
           "components": [
             {
-              "internalType": "string",
-              "name": "ipfsHash",
-              "type": "string"
+              "internalType": "address",
+              "name": "patient",
+              "type": "address"
             },
             {
               "internalType": "address",
@@ -288,9 +210,24 @@
               "type": "address"
             },
             {
+              "internalType": "string",
+              "name": "ipfsHash",
+              "type": "string"
+            },
+            {
+              "internalType": "enum Healthcare.RecordType",
+              "name": "recordType",
+              "type": "uint8"
+            },
+            {
               "internalType": "uint256",
               "name": "timestamp",
               "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isApproved",
+              "type": "bool"
             }
           ],
           "internalType": "struct Healthcare.MedicalRecord[]",
@@ -305,18 +242,18 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "patientAddress",
+          "name": "patient",
           "type": "address"
         }
       ],
-      "name": "getMedicalRecordsByAdmin",
+      "name": "getMedicalRecords",
       "outputs": [
         {
           "components": [
             {
-              "internalType": "string",
-              "name": "ipfsHash",
-              "type": "string"
+              "internalType": "address",
+              "name": "patient",
+              "type": "address"
             },
             {
               "internalType": "address",
@@ -324,9 +261,233 @@
               "type": "address"
             },
             {
+              "internalType": "string",
+              "name": "ipfsHash",
+              "type": "string"
+            },
+            {
+              "internalType": "enum Healthcare.RecordType",
+              "name": "recordType",
+              "type": "uint8"
+            },
+            {
               "internalType": "uint256",
               "name": "timestamp",
               "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isApproved",
+              "type": "bool"
+            }
+          ],
+          "internalType": "struct Healthcare.MedicalRecord[]",
+          "name": "",
+          "type": "tuple[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "doctor",
+          "type": "address"
+        }
+      ],
+      "name": "getMedicalRecordsByDoctor",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "patient",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "doctor",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "ipfsHash",
+              "type": "string"
+            },
+            {
+              "internalType": "enum Healthcare.RecordType",
+              "name": "recordType",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isApproved",
+              "type": "bool"
+            }
+          ],
+          "internalType": "struct Healthcare.MedicalRecord[]",
+          "name": "",
+          "type": "tuple[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "patient",
+          "type": "address"
+        },
+        {
+          "internalType": "enum Healthcare.RecordType",
+          "name": "recordType",
+          "type": "uint8"
+        }
+      ],
+      "name": "getMedicalRecordsByType",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "patient",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "doctor",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "ipfsHash",
+              "type": "string"
+            },
+            {
+              "internalType": "enum Healthcare.RecordType",
+              "name": "recordType",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isApproved",
+              "type": "bool"
+            }
+          ],
+          "internalType": "struct Healthcare.MedicalRecord[]",
+          "name": "",
+          "type": "tuple[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "patient",
+          "type": "address"
+        }
+      ],
+      "name": "getPatientSharedRecords",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "patient",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "doctor",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "ipfsHash",
+              "type": "string"
+            },
+            {
+              "internalType": "enum Healthcare.RecordType",
+              "name": "recordType",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            },
+            {
+              "internalType": "string",
+              "name": "notes",
+              "type": "string"
+            }
+          ],
+          "internalType": "struct Healthcare.SharedRecord[]",
+          "name": "",
+          "type": "tuple[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "patient",
+          "type": "address"
+        }
+      ],
+      "name": "getPendingRecords",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "patient",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "doctor",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "ipfsHash",
+              "type": "string"
+            },
+            {
+              "internalType": "enum Healthcare.RecordType",
+              "name": "recordType",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isApproved",
+              "type": "bool"
             }
           ],
           "internalType": "struct Healthcare.MedicalRecord[]",
@@ -348,28 +509,28 @@
       "name": "getUser",
       "outputs": [
         {
-          "internalType": "string",
-          "name": "fullName",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "email",
-          "type": "string"
-        },
-        {
           "internalType": "enum Healthcare.Role",
-          "name": "role",
+          "name": "",
           "type": "uint8"
         },
         {
           "internalType": "bool",
-          "name": "isVerified",
+          "name": "",
           "type": "bool"
         },
         {
           "internalType": "string",
-          "name": "ipfsHash",
+          "name": "",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "",
           "type": "string"
         }
       ],
@@ -377,37 +538,26 @@
       "type": "function"
     },
     {
-      "inputs": [
+      "inputs": [],
+      "name": "getUserAddressesLength",
+      "outputs": [
         {
-          "internalType": "address",
-          "name": "doctorAddress",
-          "type": "address"
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
         }
       ],
-      "name": "grantAccess",
-      "outputs": [],
-      "stateMutability": "nonpayable",
+      "stateMutability": "view",
       "type": "function"
     },
     {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "patientAddress",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "doctorAddress",
-          "type": "address"
-        }
-      ],
-      "name": "hasAccess",
+      "inputs": [],
+      "name": "getVerifiedDoctorCount",
       "outputs": [
         {
-          "internalType": "bool",
+          "internalType": "uint256",
           "name": "",
-          "type": "bool"
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -415,11 +565,6 @@
     },
     {
       "inputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        },
         {
           "internalType": "uint256",
           "name": "",
@@ -429,9 +574,9 @@
       "name": "medicalRecords",
       "outputs": [
         {
-          "internalType": "string",
-          "name": "ipfsHash",
-          "type": "string"
+          "internalType": "address",
+          "name": "patient",
+          "type": "address"
         },
         {
           "internalType": "address",
@@ -439,9 +584,24 @@
           "type": "address"
         },
         {
+          "internalType": "string",
+          "name": "ipfsHash",
+          "type": "string"
+        },
+        {
+          "internalType": "enum Healthcare.RecordType",
+          "name": "recordType",
+          "type": "uint8"
+        },
+        {
           "internalType": "uint256",
           "name": "timestamp",
           "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isApproved",
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
@@ -479,11 +639,26 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "userAddress",
+          "name": "doctor",
           "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "ipfsHash",
+          "type": "string"
+        },
+        {
+          "internalType": "enum Healthcare.RecordType",
+          "name": "recordType",
+          "type": "uint8"
+        },
+        {
+          "internalType": "string",
+          "name": "notes",
+          "type": "string"
         }
       ],
-      "name": "removeUser",
+      "name": "shareMedicalRecord",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -491,14 +666,45 @@
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "newAdmin",
-          "type": "address"
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
         }
       ],
-      "name": "transferAdmin",
-      "outputs": [],
-      "stateMutability": "nonpayable",
+      "name": "sharedRecords",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "patient",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "doctor",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "ipfsHash",
+          "type": "string"
+        },
+        {
+          "internalType": "enum Healthcare.RecordType",
+          "name": "recordType",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint256",
+          "name": "timestamp",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "notes",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
       "type": "function"
     },
     {
@@ -563,11 +769,43 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "verificationVotes",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "verifiedDoctorCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
           "name": "doctorAddress",
           "type": "address"
         }
       ],
-      "name": "verifyDoctor",
+      "name": "voteForDoctor",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

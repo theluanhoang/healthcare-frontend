@@ -1,9 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import React, { useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import { z } from "zod";
-import { useAuthStore } from "../stores/useAuthStore";
+import Sidebar from "../components/doctors/Sidebar";
 
 // Tạo schema với Zod cho tìm kiếm
 const searchSchema = z.object({
@@ -11,7 +11,6 @@ const searchSchema = z.object({
 });
 
 function DoctorPatients() {
-  const { walletAddress, role } = useAuthStore();
   const [patients, setPatients] = useState([
     // Mock data, thay bằng API thực tế
     {
@@ -89,35 +88,7 @@ function DoctorPatients() {
         <div className="container mx-auto px-6">
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Sidebar Navigation */}
-            <div className="lg:w-1/4 bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-6">Điều hướng</h2>
-              <ul className="space-y-4">
-                <li>
-                  <Link
-                    to="/doctor/patients"
-                    className="block py-2 px-4 text-indigo-600 font-semibold bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-200"
-                  >
-                    Bệnh nhân
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/doctor/schedule"
-                    className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
-                  >
-                    Lịch khám
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/doctor/analysis"
-                    className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
-                  >
-                    Phân tích
-                  </Link>
-                </li>
-              </ul>
-            </div>
+             <Sidebar />
 
             {/* Patients Content */}
             <div className="lg:w-3/4 bg-white rounded-xl shadow-lg p-8">

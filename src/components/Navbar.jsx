@@ -3,10 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useAuth } from "../hooks";
 
-const menuItems = {
-  admin: [
-    { label: "Quản Trị", path: "/admin" },
-  ],
+export const menuItems = {
   public: [
     { label: "Giới thiệu", path: "/about" },
     { label: "Tính năng", path: "/features" },
@@ -19,12 +16,11 @@ const menuItems = {
   ],
   doctor: [
     { label: "Bệnh nhân", path: "/doctor/patients" },
+    { label: "Tạo hồ sơ", path: "/doctor/add-record" },
     { label: "Lịch khám", path: "/doctor/schedule" },
     { label: "Phân tích", path: "/doctor/analysis" },
   ],
 };
-
-const adminAddress = "0x708C475173b0211d31122A069248456f539bFaDF";
 
 function Navbar() {
   const { authState, login, logout } = useAuth();
@@ -35,27 +31,17 @@ function Navbar() {
 
   useEffect(() => {
     if (authState.role) {
-
-      console.log("ROLE:::", authState.role);
-      console.log("authState.walletAddress.toLowerCase():::", authState.walletAddress.toLowerCase());
-      console.log("adminAddress.toLowerCase():::", adminAddress.toLowerCase());
-      
-      console.log("authState.walletAddress.toLowerCase() === adminAddress.toLowerCase(): ", authState.walletAddress.toLowerCase() === adminAddress.toLowerCase());
-      
-      
-    if (authState.walletAddress.toLowerCase() === adminAddress.toLowerCase()) {
-      console.log("ADMIN");
-      
-      setRoleDetected("admin");
-    } else {
       setRoleDetected(
-        authState.role === "1" ? "patient" : authState.role === "2" ? "doctor" : "public"
+        authState.role === "1"
+          ? "patient"
+          : authState.role === "2" && authState.isVerified
+          ? "doctor"
+          : "public"
       );
+    } else {
+      setRoleDetected("public");
     }
-  } else {
-    setRoleDetected("public");
-  }
-  }, [authState.role, authState.walletAddress]);
+  }, [authState.role, authState.isVerified]);
 
   const handleLogin = async () => {
     if (!window.ethereum) {
@@ -91,15 +77,9 @@ function Navbar() {
         } else {
           toast.error("Tài khoản bác sĩ đang chờ xác minh.");
           setRoleDetected("public");
+          logout();
           navigate("/");
         }
-        return;
-      }
-
-      if (role === "3") {
-        toast.success(`Đăng nhập thành công! Chào ${fullName} (Quản trị viên)`);
-        setRoleDetected("admin");
-        navigate("/admin");
         return;
       }
 
@@ -123,7 +103,9 @@ function Navbar() {
     navigate("/");
   };
 
-  const menus = authState.walletAddress ? menuItems[roleDetected] || menuItems.public : menuItems.public;
+  const menus = authState.walletAddress
+    ? menuItems[roleDetected] || menuItems.public
+    : menuItems.public;
 
   return (
     <nav className="bg-gradient-to-r from-indigo-50 to-blue-50 shadow-xl sticky top-0 z-50">
@@ -153,10 +135,11 @@ function Navbar() {
 
           {/* Wallet Connection / User Info */}
           <div className="hidden md:flex items-center space-x-4">
-            {authState.walletAddress ? (
+            {authState.isLogged && authState.walletAddress ? (
               <div className="flex items-center space-x-4">
                 <span className="text-sm font-mono bg-gray-100 px-4 py-2 rounded-full text-gray-800 shadow-sm">
-                  {authState.walletAddress.slice(0, 6)}...{authState.walletAddress.slice(-4)}
+                  {authState.walletAddress.slice(0, 6)}...
+                  {authState.walletAddress.slice(-4)}
                 </span>
                 <button
                   onClick={handleLogout}
@@ -190,12 +173,32 @@ function Navbar() {
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             )}
           </button>
@@ -218,10 +221,11 @@ function Navbar() {
               ))}
             </ul>
             <div className="mt-6 border-t pt-4">
-              {authState.walletAddress ? (
+              {authState.isLogged && authState.walletAddress ? (
                 <div className="flex flex-col space-y-4">
                   <span className="text-sm font-mono bg-gray-100 px-4 py-2 rounded-full text-gray-800 text-center">
-                    {authState.walletAddress.slice(0, 6)}...{authState.walletAddress.slice(-4)}
+                    {authState.walletAddress.slice(0, 6)}...
+                    {authState.walletAddress.slice(-4)}
                   </span>
                   <button
                     onClick={handleLogout}

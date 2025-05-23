@@ -2,8 +2,10 @@ import { Route, Routes } from 'react-router-dom'
 import About from '../pages/About'
 import Admin from '../pages/admin/Admin'
 import Contact from '../pages/Contact'
+import DoctorAddRecord from '../pages/DoctorAddRecord'
 import DoctorAnalysis from '../pages/DoctorAnalysis'
 import DoctorPatients from '../pages/DoctorPatients'
+import DoctorRecords from '../pages/DoctorRecords'
 import DoctorSchedule from '../pages/DoctorSchedule'
 import Features from '../pages/Features'
 import Login from '../pages/Login'
@@ -25,6 +27,8 @@ function AppRoutes() {
       <Route path="/patient/appointment" element={<PatientAppointments />} />
       <Route path="/patient/share" element={<PatientShare />} />
       <Route path="/doctor/patients" element={<DoctorPatients/>} />
+      <Route path="/doctor/add-record" element={<DoctorAddRecord />} />
+      <Route path="/doctor/records" element={<DoctorRecords />} />
       <Route path="/doctor/schedule" element={<DoctorSchedule/>} />
       <Route path="/doctor/analysis" element={<DoctorAnalysis/>} />
     </Routes>

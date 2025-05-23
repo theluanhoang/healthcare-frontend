@@ -8,12 +8,11 @@ import {
   Title,
   Tooltip,
 } from "chart.js";
-import React, { useState } from "react";
+import { useState } from "react";
 import { Bar } from "react-chartjs-2";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
 import { z } from "zod";
-import { useAuthStore } from "../stores/useAuthStore";
+import Sidebar from "../components/doctors/Sidebar";
 
 // Đăng ký các thành phần cần thiết cho Chart.js
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -25,7 +24,6 @@ const filterSchema = z.object({
 });
 
 function DoctorAnalysis() {
-  const { walletAddress, role } = useAuthStore();
   const [analysisData, setAnalysisData] = useState([
     // Mock data, thay bằng API thực tế
     {
@@ -127,35 +125,7 @@ function DoctorAnalysis() {
         <div className="container mx-auto px-6">
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Sidebar Navigation */}
-            <div className="lg:w-1/4 bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-6">Điều hướng</h2>
-              <ul className="space-y-4">
-                <li>
-                  <Link
-                    to="/doctor/patients"
-                    className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
-                  >
-                    Bệnh nhân
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/doctor/schedule"
-                    className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
-                  >
-                    Lịch khám
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/doctor/analysis"
-                    className="block py-2 px-4 text-indigo-600 font-semibold bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-200"
-                  >
-                    Phân tích
-                  </Link>
-                </li>
-              </ul>
-            </div>
+            <Sidebar />
 
             {/* Analysis Content */}
             <div className="lg:w-3/4">

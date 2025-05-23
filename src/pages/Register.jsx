@@ -20,7 +20,6 @@ function Register() {
     defaultValues: {
       fullName: "",
       email: "",
-      password: "",
       role: "PATIENT",
       certificate: undefined,
     },
@@ -58,9 +57,7 @@ function Register() {
         data.role === "PATIENT" ? 1 : data.role === "DOCTOR" ? 2 : null;
       if (roleEnum === null) {
         throw new Error("Vai trò không hợp lệ: " + data.role);
-      }
-      console.log("data.fullName, data.email, roleEnum, ipfsHashNew::::", data.fullName, data.email, roleEnum, ipfsHashNew);
-      
+      }      
       const tx = await contract.register(data.fullName, data.email, roleEnum, ipfsHashNew, {
         gasLimit: 500000,
       });
@@ -147,27 +144,6 @@ function Register() {
             {errors.email && (
               <p className="text-red-500 text-sm mt-1">
                 {errors.email.message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Mật khẩu
-            </label>
-            <input
-              type="password"
-              id="password"
-              {...register("password")}
-              placeholder="Nhập mật khẩu"
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-            />
-            {errors.password && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.password.message}
               </p>
             )}
           </div>

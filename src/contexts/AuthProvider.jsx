@@ -4,7 +4,8 @@ import { useSmartContract } from "../hooks";
 export const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const { connectWallet, getUser, disconnectWallet, contract } = useSmartContract();
+  const { connectWallet, getUser, disconnectWallet, contract } =
+    useSmartContract();
   const [authState, setAuthState] = useState({
     walletAddress: null,
     role: null,
@@ -12,6 +13,7 @@ export function AuthProvider({ children }) {
     fullName: null,
     email: null,
     ipfsHash: null,
+    isLogged: false,
   });
 
   const saveAuthState = (state) => {
@@ -28,7 +30,6 @@ export function AuthProvider({ children }) {
         throw new Error("Không thể lấy thông tin người dùng.");
       }
       const { role, isVerified, fullName, email, ipfsHash } = userData;
-
       const newAuthState = {
         walletAddress: address,
         role: role.toString(),
@@ -36,7 +37,11 @@ export function AuthProvider({ children }) {
         fullName,
         email,
         ipfsHash,
+        isLogged: true,
       };
+      if (role === "0") {
+        newAuthState.isLogged = false;
+      }
 
       saveAuthState(newAuthState);
       return newAuthState;
@@ -55,6 +60,7 @@ export function AuthProvider({ children }) {
       fullName: null,
       email: null,
       ipfsHash: null,
+      isLogged: false,
     };
     saveAuthState(newAuthState);
   }, [disconnectWallet]);
@@ -63,7 +69,6 @@ export function AuthProvider({ children }) {
     const storedAuthState = localStorage.getItem("authState");
     if (storedAuthState) {
       const parsedState = JSON.parse(storedAuthState);
-      console.log("Parsed state from localStorage:", parsedState);
       setAuthState(parsedState);
 
       const verifyUser = async () => {
@@ -71,9 +76,7 @@ export function AuthProvider({ children }) {
           if (!parsedState.walletAddress) {
             throw new Error("Địa chỉ ví không hợp lệ.");
           }
-          console.log("Verifying user for address:", parsedState.walletAddress);
           const userData = await getUser(parsedState.walletAddress);
-          console.log("User data from verifyUser:", userData);
           if (!userData) {
             throw new Error("Thông tin người dùng không tồn tại.");
           }
@@ -85,11 +88,14 @@ export function AuthProvider({ children }) {
             fullName,
             email,
             ipfsHash,
+            isLogged: true,
           };
           saveAuthState(updatedState);
         } catch (error) {
           console.error("Không thể xác minh người dùng khi reload:", error);
-          if (!error.message.includes("Hợp đồng hoặc địa chỉ ví chưa sẵn sàng")) {
+          if (
+            !error.message.includes("Hợp đồng hoặc địa chỉ ví chưa sẵn sàng")
+          ) {
             logout();
           }
         }
@@ -101,5 +107,9 @@ export function AuthProvider({ children }) {
     }
   }, [getUser, logout, contract]);
 
-  return <AuthContext.Provider value={{ authState, login, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ authState, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
