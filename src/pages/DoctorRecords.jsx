@@ -50,7 +50,6 @@ function DoctorRecords() {
     if (!contract || !walletAddress || !getMedicalRecordsByDoctor) return;
     setLoading(true);
     try {
-      // Kiểm tra vai trò trước khi gọi
       if (userRole !== "2") {
         console.warn("Người dùng không phải bác sĩ hoặc chưa xác minh:", userRole);
         setRecords([]);
@@ -91,22 +90,52 @@ function DoctorRecords() {
   // Fetch record details from IPFS
   const fetchRecordDetails = useCallback(async (ipfsHash) => {
     if (!ipfs) {
-      toast.error("IPFS client chưa sẵn sàng.");
+      console.error("IPFS client chưa khởi tạo.");
+      toast.error("IPFS client chưa sẵn sàng. Vui lòng kiểm tra node IPFS local.");
+      return;
+    }
+    if (!ipfsHash || typeof ipfsHash !== "string" || !ipfsHash.startsWith("Qm") || ipfsHash.length < 46) {
+      console.error("IPFS Hash không hợp lệ:", ipfsHash);
+      toast.error("Hash IPFS không hợp lệ hoặc không tồn tại.");
       return;
     }
     setDetailLoading(true);
     try {
-      const response = await ipfs.get(ipfsHash);
+      console.log("Đang lấy dữ liệu từ IPFS local với hash:", ipfsHash);
+      const response = await ipfs.get(ipfsHash, { timeout: 10000 });
       let content = "";
       for await (const chunk of response) {
         content += new TextDecoder().decode(chunk);
       }
-      const parsed = JSON.parse(content);
+      console.log("Nội dung thô từ IPFS:", content);
+
+      // Trích xuất JSON từ nội dung thô
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("Không tìm thấy JSON hợp lệ trong nội dung IPFS.");
+      }
+      const jsonContent = jsonMatch[0];
+      console.log("JSON trích xuất:", jsonContent);
+
+      const parsed = JSON.parse(jsonContent);
+      if (!parsed.patientAddress || !parsed.visitDate || !parsed.recordType) {
+        throw new Error("Dữ liệu IPFS không đúng định dạng.");
+      }
       setRecordDetails(parsed);
-      console.log("Record details:", parsed);
+      console.log("Chi tiết hồ sơ:", parsed);
     } catch (error) {
-      console.error("Lỗi khi lấy chi tiết bệnh án:", error);
-      toast.error("Không thể lấy chi tiết bệnh án từ IPFS.");
+      console.error("Lỗi khi lấy chi tiết bệnh án từ IPFS:", error);
+      let errorMessage = "Không thể lấy chi tiết bệnh án từ IPFS.";
+      if (error.message.includes("ECONNREFUSED")) {
+        errorMessage = "Không thể kết nối đến node IPFS local. Vui lòng kiểm tra node đang chạy.";
+      } else if (error.message.includes("JSON") || error.message.includes("not valid JSON")) {
+        errorMessage = "Dữ liệu IPFS không phải JSON hợp lệ.";
+      } else if (error.message.includes("timeout")) {
+        errorMessage = "Yêu cầu IPFS hết thời gian. Vui lòng thử lại.";
+      } else if (error.message.includes("Không tìm thấy JSON")) {
+        errorMessage = "Không tìm thấy JSON hợp lệ trong nội dung IPFS.";
+      }
+      toast.error(errorMessage);
       setRecordDetails(null);
     } finally {
       setDetailLoading(false);
@@ -136,10 +165,10 @@ function DoctorRecords() {
 
   // Render record type
   const getRecordTypeName = (type) => {
-    switch (type) {
-      case 1: return "Hồ sơ khám bệnh";
-      case 2: return "Kết quả xét nghiệm";
-      case 3: return "Đơn thuốc";
+    switch (type.toString()) {
+      case "1": return "Hồ sơ khám bệnh";
+      case "2": return "Kết quả xét nghiệm";
+      case "3": return "Đơn thuốc";
       default: return "Không xác định";
     }
   };
@@ -147,50 +176,137 @@ function DoctorRecords() {
   // Render record details
   const renderRecordDetails = () => {
     if (detailLoading) {
-      return <p className="text-gray-600">Đang tải chi tiết...</p>;
+      return (
+        <div className="flex justify-center items-center py-8">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="ml-3 text-gray-600 text-lg">Đang tải chi tiết...</span>
+        </div>
+      );
     }
     if (!recordDetails) {
-      return <p className="text-red-500">Không thể tải chi tiết bệnh án.</p>;
+      return (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg flex items-center">
+          <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <p>Không thể tải chi tiết bệnh án.</p>
+        </div>
+      );
     }
 
     return (
-      <div className="space-y-4">
-        <div>
-          <h4 className="text-lg font-semibold text-gray-800">Thông tin chung</h4>
-          <p><strong>Bệnh nhân:</strong> {patientsMap[recordDetails.patientAddress] || recordDetails.patientAddress}</p>
-          <p><strong>Ngày khám:</strong> {recordDetails.visitDate}</p>
-          <p><strong>Loại hồ sơ:</strong> {recordDetails.recordType}</p>
-          <p><strong>Ngày tạo:</strong> {new Date(recordDetails.createdAt).toLocaleString()}</p>
+      <div className="space-y-6">
+        {/* Thông tin chung */}
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
+          <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+            <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Thông tin chung
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Bệnh nhân</p>
+              <p className="text-gray-800 font-medium">{patientsMap[recordDetails.patientAddress] || recordDetails.patientAddress}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Ngày khám</p>
+              <p className="text-gray-800 font-medium">{recordDetails.visitDate}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Loại hồ sơ</p>
+              <p className="text-gray-800 font-medium">{recordDetails.recordType}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Ngày tạo</p>
+              <p className="text-gray-800 font-medium">{new Date(recordDetails.createdAt).toLocaleString()}</p>
+            </div>
+          </div>
         </div>
+
+        {/* Hồ sơ khám bệnh */}
         {recordDetails.recordType === "EXAMINATION_RECORD" && (
-          <div>
-            <h4 className="text-lg font-semibold text-gray-800">Hồ sơ khám bệnh</h4>
-            <p><strong>Triệu chứng:</strong> {recordDetails.details.symptoms}</p>
-            <p><strong>Chẩn đoán:</strong> {recordDetails.details.diagnosis}</p>
-            {recordDetails.details.notes && <p><strong>Ghi chú:</strong> {recordDetails.details.notes}</p>}
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
+            <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+              </svg>
+              Hồ sơ khám bệnh
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-500">Triệu chứng</p>
+                <p className="text-gray-800">{recordDetails.details.symptoms}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Chẩn đoán</p>
+                <p className="text-gray-800">{recordDetails.details.diagnosis}</p>
+              </div>
+              {recordDetails.details.notes && (
+                <div>
+                  <p className="text-sm text-gray-500">Ghi chú</p>
+                  <p className="text-gray-800">{recordDetails.details.notes}</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {/* Kết quả xét nghiệm */}
         {recordDetails.recordType === "TEST_RESULT" && (
-          <div>
-            <h4 className="text-lg font-semibold text-gray-800">Kết quả xét nghiệm</h4>
-            <p><strong>Loại xét nghiệm:</strong> {recordDetails.details.testType}</p>
-            <p><strong>Kết quả:</strong> {recordDetails.details.results}</p>
-            {recordDetails.details.comments && <p><strong>Nhận xét:</strong> {recordDetails.details.comments}</p>}
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
+            <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5s3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18s-3.332.477-4.5 1.253"></path>
+              </svg>
+              Kết quả xét nghiệm
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-500">Loại xét nghiệm</p>
+                <p className="text-gray-800">{recordDetails.details.testType}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Kết quả</p>
+                <p className="text-gray-800">{recordDetails.details.results}</p>
+              </div>
+              {recordDetails.details.comments && (
+                <div>
+                  <p className="text-sm text-gray-500">Nhận xét</p>
+                  <p className="text-gray-800">{recordDetails.details.comments}</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {/* Đơn thuốc */}
         {recordDetails.recordType === "PRESCRIPTION" && (
-          <div>
-            <h4 className="text-lg font-semibold text-gray-800">Đơn thuốc</h4>
-            <ul className="list-disc ml-5">
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
+            <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h-2m-6 0H7m2-2h6"></path>
+              </svg>
+              Đơn thuốc
+            </h4>
+            <div className="space-y-4">
               {recordDetails.details.medications.map((med, index) => (
-                <li key={index}>
-                  <p><strong>Tên thuốc:</strong> {med.name}</p>
-                  <p><strong>Liều lượng:</strong> {med.dosage}</p>
-                  <p><strong>Hướng dẫn:</strong> {med.instructions}</p>
-                </li>
+                <div key={index} className="border-l-4 border-indigo-200 pl-4">
+                  <p className="text-sm text-gray-500">Tên thuốc</p>
+                  <p className="text-gray-800 font-medium">{med.name}</p>
+                  <p className="text-sm text-gray-500 mt-1">Liều lượng</p>
+                  <p className="text-gray-800">{med.dosage}</p>
+                  <p className="text-sm text-gray-500 mt-1">Hướng dẫn</p>
+                  <p className="text-gray-800">{med.instructions}</p>
+                </div>
               ))}
-            </ul>
-            {recordDetails.details.notes && <p><strong>Ghi chú:</strong> {recordDetails.details.notes}</p>}
+              {recordDetails.details.notes && (
+                <div>
+                  <p className="text-sm text-gray-500">Ghi chú</p>
+                  <p className="text-gray-800">{recordDetails.details.notes}</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -311,7 +427,6 @@ function DoctorRecords() {
                       </table>
                     </div>
 
-                    {/* Pagination */}
                     {totalPages > 1 && (
                       <div className="flex justify-between items-center mt-6">
                         <button
@@ -343,22 +458,29 @@ function DoctorRecords() {
 
       {/* Modal for record details */}
       {selectedRecord && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-3xl w-full max-h-[85vh] overflow-y-auto transform transition-all duration-300 scale-100 sm:scale-105">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Chi tiết hồ sơ y tế</h2>
+              <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+                <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path>
+                </svg>
+                Chi tiết hồ sơ y tế
+              </h2>
               <button
                 onClick={closeModal}
-                className="text-gray-600 hover:text-gray-800 text-xl"
+                className="text-gray-500 hover:text-gray-700 text-xl p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
               >
-                ×
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
               </button>
             </div>
             {renderRecordDetails()}
-            <div className="mt-6 flex justify-end">
+            <div className="mt-8 flex justify-end">
               <button
                 onClick={closeModal}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                className="px-6 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
               >
                 Đóng
               </button>

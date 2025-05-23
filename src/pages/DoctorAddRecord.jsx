@@ -120,7 +120,7 @@ function DoctorAddRecord() {
     contract,
     walletAddress,
   } = useSmartContract();
-  const { ipfs, uploadFile } = useIpfs();
+  const { ipfs, uploadJson } = useIpfs();
   const [isVerifiedDoctor, setIsVerifiedDoctor] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -279,12 +279,8 @@ function DoctorAddRecord() {
 
         for (const record of records) {
           const jsonString = JSON.stringify(record.data);
-          const blob = new Blob([jsonString], { type: "application/json" });
-          const file = new File([blob], `medical_record_${record.data.recordType}_${Date.now()}.json`, {
-            type: "application/json",
-          });
-
-          const cid = await uploadFile(file);
+          console.log(`JSON data for ${record.data.recordType}:`, jsonString);
+          const cid = await uploadJson(jsonString);
           console.log(`IPFS CID (${record.data.recordType}):`, cid);
 
           await addMedicalRecord(data.patient, cid, record.type);
@@ -300,7 +296,7 @@ function DoctorAddRecord() {
         setUploading(false);
       }
     },
-    [ipfs, uploadFile, walletAddress, addMedicalRecord, reset]
+    [ipfs, uploadJson, walletAddress, addMedicalRecord, reset]
   );
 
   const verifyDoctor = useCallback(
