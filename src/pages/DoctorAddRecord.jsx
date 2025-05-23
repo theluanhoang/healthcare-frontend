@@ -236,67 +236,70 @@ function DoctorAddRecord() {
         toast.error("IPFS client chưa sẵn sàng.");
         return;
       }
+      if (!isVerifiedDoctor) {
+        toast.error("Chỉ bác sĩ đã xác minh mới có thể thêm hồ sơ.");
+        return;
+      }
 
       setUploading(true);
       try {
-        const records = [];
+        // Gộp tất cả components vào một JSON duy nhất
+        const combinedRecord = {
+          patientAddress: data.patient,
+          visitDate: data.visitDate,
+          createdBy: walletAddress,
+          createdAt: new Date().toISOString(),
+          records: [],
+        };
 
         if (data.includeExamination) {
-          const recordData = {
-            patientAddress: data.patient,
+          combinedRecord.records.push({
             recordType: "EXAMINATION_RECORD",
-            createdBy: walletAddress,
-            createdAt: new Date().toISOString(),
-            visitDate: data.visitDate,
             details: data.examination,
-          };
-          records.push({ data: recordData, type: 1 });
+          });
         }
 
         if (data.includeTestResult) {
-          const recordData = {
-            patientAddress: data.patient,
+          combinedRecord.records.push({
             recordType: "TEST_RESULT",
-            createdBy: walletAddress,
-            createdAt: new Date().toISOString(),
-            visitDate: data.visitDate,
             details: data.testResult,
-          };
-          records.push({ data: recordData, type: 2 });
+          });
         }
 
         if (data.includePrescription) {
-          const recordData = {
-            patientAddress: data.patient,
+          combinedRecord.records.push({
             recordType: "PRESCRIPTION",
-            createdBy: walletAddress,
-            createdAt: new Date().toISOString(),
-            visitDate: data.visitDate,
             details: data.prescription,
-          };
-          records.push({ data: recordData, type: 3 });
+          });
         }
 
-        for (const record of records) {
-          const jsonString = JSON.stringify(record.data);
-          console.log(`JSON data for ${record.data.recordType}:`, jsonString);
-          const cid = await uploadJson(jsonString);
-          console.log(`IPFS CID (${record.data.recordType}):`, cid);
+        console.log("Combined JSON data:", combinedRecord);
 
-          await addMedicalRecord(data.patient, cid, record.type);
-          toast.success(`Hồ sơ ${record.data.recordType} đã được thêm!`);
-        }
+        // Lưu JSON vào IPFS
+        const cid = await uploadJson(JSON.stringify(combinedRecord));
+        console.log("JSON uploaded to IPFS, CID:", cid);
+
+        // Thêm bản ghi vào blockchain
+        await addMedicalRecord(data.patient, cid, 1); // recordType 1 cho bản ghi gộp
+        toast.success("Hồ sơ y tế đã được thêm thành công!");
 
         reset();
-        toast.success("Tất cả hồ sơ đã được thêm thành công!");
       } catch (error) {
         console.error("Lỗi khi thêm hồ sơ:", error);
-        toast.error(error.message || "Không thể thêm hồ sơ y tế.");
+        let errorMessage = "Không thể thêm hồ sơ y tế.";
+        if (error.message.includes("IPFS")) {
+          errorMessage = "Lỗi khi tải lên IPFS. Vui lòng kiểm tra node IPFS.";
+        } else if (error.message.includes("user rejected")) {
+          errorMessage = "Giao dịch bị từ chối bởi ví.";
+        } else if (error.message.includes("revert")) {
+          errorMessage = "Hợp đồng thông minh từ chối giao dịch.";
+        }
+        toast.error(errorMessage);
       } finally {
         setUploading(false);
       }
     },
-    [ipfs, uploadJson, walletAddress, addMedicalRecord, reset]
+    [ipfs, uploadJson, walletAddress, addMedicalRecord, reset, isVerifiedDoctor]
   );
 
   const verifyDoctor = useCallback(

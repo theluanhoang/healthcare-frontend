@@ -21,6 +21,7 @@ function DoctorRecords() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [userRole, setUserRole] = useState(null);
+  const [activeTab, setActiveTab] = useState(null);
   const recordsPerPage = 10;
 
   // Memoized patients map for quick lookup
@@ -118,10 +119,11 @@ function DoctorRecords() {
       console.log("JSON trích xuất:", jsonContent);
 
       const parsed = JSON.parse(jsonContent);
-      if (!parsed.patientAddress || !parsed.visitDate || !parsed.recordType) {
+      if (!parsed.patientAddress || !parsed.visitDate) {
         throw new Error("Dữ liệu IPFS không đúng định dạng.");
       }
       setRecordDetails(parsed);
+      setActiveTab(parsed.records?.[0]?.recordType || parsed.recordType);
       console.log("Chi tiết hồ sơ:", parsed);
     } catch (error) {
       console.error("Lỗi khi lấy chi tiết bệnh án từ IPFS:", error);
@@ -152,6 +154,7 @@ function DoctorRecords() {
   const closeModal = useCallback(() => {
     setSelectedRecord(null);
     setRecordDetails(null);
+    setActiveTab(null);
   }, []);
 
   // Pagination
@@ -166,7 +169,7 @@ function DoctorRecords() {
   // Render record type
   const getRecordTypeName = (type) => {
     switch (type.toString()) {
-      case "1": return "Hồ sơ khám bệnh";
+      case "1": return "Hồ sơ tổng hợp";
       case "2": return "Kết quả xét nghiệm";
       case "3": return "Đơn thuốc";
       default: return "Không xác định";
@@ -194,120 +197,175 @@ function DoctorRecords() {
       );
     }
 
+    const renderTabContent = (record) => {
+      if (!record) return null;
+
+      switch (record.recordType) {
+        case "EXAMINATION_RECORD":
+          return (
+            <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-8 hover:shadow-md transition-shadow duration-200">
+              <h4 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+                Hồ sơ khám bệnh
+              </h4>
+              <div className="space-y-4">
+                <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                  <p className="text-base text-gray-500">Triệu chứng</p>
+                  <p className="text-gray-800">{record.details.symptoms}</p>
+                </div>
+                <div className="border-t border-gray-200"></div>
+                <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                  <p className="text-base text-gray-500">Chẩn đoán</p>
+                  <p className="text-gray-800">{record.details.diagnosis}</p>
+                </div>
+                {record.details.notes && (
+                  <>
+                    <div className="border-t border-gray-200"></div>
+                    <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                      <p className="text-base text-gray-500">Ghi chú</p>
+                      <p className="text-gray-800">{record.details.notes}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        case "TEST_RESULT":
+          return (
+            <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-8 hover:shadow-md transition-shadow duration-200">
+              <h4 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5s3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18s-3.332.477-4.5 1.253"></path>
+                </svg>
+                Kết quả xét nghiệm
+              </h4>
+              <div className="space-y-4">
+                <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                  <p className="text-base text-gray-500">Loại xét nghiệm</p>
+                  <p className="text-gray-800">{record.details.testType}</p>
+                </div>
+                <div className="border-t border-gray-200"></div>
+                <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                  <p className="text-base text-gray-500">Kết quả</p>
+                  <p className="text-gray-800">{record.details.results}</p>
+                </div>
+                {record.details.comments && (
+                  <>
+                    <div className="border-t border-gray-200"></div>
+                    <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                      <p className="text-base text-gray-500">Nhận xét</p>
+                      <p className="text-gray-800">{record.details.comments}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        case "PRESCRIPTION":
+          return (
+            <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-8 hover:shadow-md transition-shadow duration-200">
+              <h4 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h-2m-6 0H7m2-2h6"></path>
+                </svg>
+                Đơn thuốc
+              </h4>
+              <div className="space-y-4">
+                {record.details.medications.map((med, index) => (
+                  <div key={index} className="border-l-4 border-indigo-200 pl-4">
+                    <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                      <p className="text-base text-gray-500">Tên thuốc</p>
+                      <p className="text-gray-800 font-medium">{med.name}</p>
+                    </div>
+                    <div className="border-t border-gray-200"></div>
+                    <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                      <p className="text-base text-gray-500">Liều lượng</p>
+                      <p className="text-gray-800">{med.dosage}</p>
+                    </div>
+                    <div className="border-t border-gray-200"></div>
+                    <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                      <p className="text-base text-gray-500">Hướng dẫn</p>
+                      <p className="text-gray-800">{med.instructions}</p>
+                    </div>
+                    {index < record.details.medications.length - 1 && <div className="border-t border-gray-200 my-2"></div>}
+                  </div>
+                ))}
+                {record.details.notes && (
+                  <>
+                    <div className="border-t border-gray-200"></div>
+                    <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+                      <p className="text-base text-gray-500">Ghi chú</p>
+                      <p className="text-gray-800">{record.details.notes}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        default:
+          return null;
+      }
+    };
+
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Thông tin chung */}
-        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
-          <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-8 hover:shadow-md transition-shadow duration-200">
+          <h4 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
             <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
             Thông tin chung
           </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-500">Bệnh nhân</p>
-              <p className="text-gray-800 font-medium">{patientsMap[recordDetails.patientAddress] || recordDetails.patientAddress}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+              <p className="text-base text-gray-500">Bệnh nhân</p>
+              <p className="text-gray-800 font-medium">
+                {patientsMap[recordDetails.patientAddress] || `${recordDetails.patientAddress.slice(0, 6)}...${recordDetails.patientAddress.slice(-4)}`}
+              </p>
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Ngày khám</p>
+            <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+              <p className="text-base text-gray-500">Ngày khám</p>
               <p className="text-gray-800 font-medium">{recordDetails.visitDate}</p>
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Loại hồ sơ</p>
-              <p className="text-gray-800 font-medium">{recordDetails.recordType}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Ngày tạo</p>
+            <div className="hover:bg-gray-50 p-2 rounded-md transition-colors duration-200">
+              <p className="text-base text-gray-500">Ngày tạo</p>
               <p className="text-gray-800 font-medium">{new Date(recordDetails.createdAt).toLocaleString()}</p>
             </div>
           </div>
         </div>
 
-        {/* Hồ sơ khám bệnh */}
-        {recordDetails.recordType === "EXAMINATION_RECORD" && (
-          <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
-            <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-              </svg>
-              Hồ sơ khám bệnh
-            </h4>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Triệu chứng</p>
-                <p className="text-gray-800">{recordDetails.details.symptoms}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Chẩn đoán</p>
-                <p className="text-gray-800">{recordDetails.details.diagnosis}</p>
-              </div>
-              {recordDetails.details.notes && (
-                <div>
-                  <p className="text-sm text-gray-500">Ghi chú</p>
-                  <p className="text-gray-800">{recordDetails.details.notes}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Kết quả xét nghiệm */}
-        {recordDetails.recordType === "TEST_RESULT" && (
-          <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
-            <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5s3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18s-3.332.477-4.5 1.253"></path>
-              </svg>
-              Kết quả xét nghiệm
-            </h4>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Loại xét nghiệm</p>
-                <p className="text-gray-800">{recordDetails.details.testType}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Kết quả</p>
-                <p className="text-gray-800">{recordDetails.details.results}</p>
-              </div>
-              {recordDetails.details.comments && (
-                <div>
-                  <p className="text-sm text-gray-500">Nhận xét</p>
-                  <p className="text-gray-800">{recordDetails.details.comments}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Đơn thuốc */}
-        {recordDetails.recordType === "PRESCRIPTION" && (
-          <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
-            <h4 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              <svg className="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h-2m-6 0H7m2-2h6"></path>
-              </svg>
-              Đơn thuốc
-            </h4>
-            <div className="space-y-4">
-              {recordDetails.details.medications.map((med, index) => (
-                <div key={index} className="border-l-4 border-indigo-200 pl-4">
-                  <p className="text-sm text-gray-500">Tên thuốc</p>
-                  <p className="text-gray-800 font-medium">{med.name}</p>
-                  <p className="text-sm text-gray-500 mt-1">Liều lượng</p>
-                  <p className="text-gray-800">{med.dosage}</p>
-                  <p className="text-sm text-gray-500 mt-1">Hướng dẫn</p>
-                  <p className="text-gray-800">{med.instructions}</p>
-                </div>
+        {/* Tabs for record types */}
+        {recordDetails.records ? (
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-8">
+            <div className="flex border-b border-gray-200">
+              {recordDetails.records.map((record) => (
+                <button
+                  key={record.recordType}
+                  onClick={() => setActiveTab(record.recordType)}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    activeTab === record.recordType
+                      ? "border-b-2 border-indigo-600 text-indigo-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {record.recordType === "EXAMINATION_RECORD" ? "Hồ sơ khám bệnh" :
+                   record.recordType === "TEST_RESULT" ? "Kết quả xét nghiệm" :
+                   record.recordType === "PRESCRIPTION" ? "Đơn thuốc" : "Không xác định"}
+                </button>
               ))}
-              {recordDetails.details.notes && (
-                <div>
-                  <p className="text-sm text-gray-500">Ghi chú</p>
-                  <p className="text-gray-800">{recordDetails.details.notes}</p>
-                </div>
-              )}
+            </div>
+            <div className="mt-6">
+              {renderTabContent(recordDetails.records.find((r) => r.recordType === activeTab))}
             </div>
           </div>
+        ) : (
+          renderTabContent({
+            recordType: recordDetails.recordType,
+            details: recordDetails.details,
+          })
         )}
       </div>
     );
@@ -379,7 +437,7 @@ function DoctorRecords() {
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="bg-gray-50">
-                            <th className="p-4 text-sm font-semibold text-gray-700">Bệnh nhân</th>
+                            <th className="p-4 text-sm font-semibold text-gray-700 min-w-[200px]">Bệnh nhân</th>
                             <th className="p-4 text-sm font-semibold text-gray-700">Ngày khám</th>
                             <th className="p-4 text-sm font-semibold text-gray-700">Loại hồ sơ</th>
                             <th className="p-4 text-sm font-semibold text-gray-700">IPFS Hash</th>
@@ -390,16 +448,16 @@ function DoctorRecords() {
                         <tbody>
                           {paginatedRecords.map((record) => (
                             <tr key={record.recordIndex} className="border-b hover:bg-gray-50">
-                              <td className="p-4 text-sm text-gray-600">
+                              <td className="p-4 text-sm text-gray-600 truncate max-w-[200px]">
                                 {patientsMap[record.patient] || `${record.patient.slice(0, 6)}...${record.patient.slice(-4)}`}
                               </td>
                               <td className="p-4 text-sm text-gray-600">
-                                {recordDetails?.visitDate || new Date(record.timestamp * 1000).toISOString().split("T")[0]}
+                                {new Date(record.timestamp * 1000).toISOString().split("T")[0]}
                               </td>
                               <td className="p-4 text-sm text-gray-600">
                                 {getRecordTypeName(record.recordType)}
                               </td>
-                              <td className="p-4 text-sm text-gray-600">
+                              <td className="p-4 text-sm text-gray-600 truncate max-w-[150px]">
                                 {record.ipfsHash.slice(0, 10)}...{record.ipfsHash.slice(-4)}
                               </td>
                               <td className="p-4 text-sm">
@@ -458,7 +516,7 @@ function DoctorRecords() {
 
       {/* Modal for record details */}
       {selectedRecord && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-300">
+        <div className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity duration-300">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-3xl w-full max-h-[85vh] overflow-y-auto transform transition-all duration-300 scale-100 sm:scale-105">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800 flex items-center">
