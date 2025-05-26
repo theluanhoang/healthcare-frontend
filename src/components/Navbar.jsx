@@ -10,15 +10,18 @@ export const menuItems = {
     { label: "Liên hệ", path: "/contact" },
   ],
   patient: [
-    { label: "Hồ sơ", path: "/patient/profile" },
-    { label: "Lịch hẹn", path: "/patient/appointments" },
-    { label: "Chia sẻ dữ liệu", path: "/patient/share" },
+    { path: "/patient/profile", label: "Hồ sơ" },
+    { path: "/patient/records", label: "Hồ sơ y tế" },
+    { path: "/patient/appointment", label: "Lịch hẹn" },
+    { path: "/patient/share", label: "Chia sẻ dữ liệu" },
   ],
   doctor: [
-    { label: "Bệnh nhân", path: "/doctor/patients" },
-    { label: "Tạo hồ sơ", path: "/doctor/add-record" },
-    { label: "Lịch khám", path: "/doctor/schedule" },
-    { label: "Phân tích", path: "/doctor/analysis" },
+    { path: "/doctor/patients", label: "Bệnh nhân" },
+    { path: "/doctor/patient-access", label: "Quyền truy cập" },
+    { path: "/doctor/add-record", label: "Thêm hồ sơ" },
+    { path: "/doctor/records", label: "Hồ sơ y tế" },
+    { path: "/doctor/schedule", label: "Lịch khám" },
+    { path: "/doctor/analysis", label: "Phân tích" },
   ],
 };
 

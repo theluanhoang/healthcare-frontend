@@ -3,6 +3,7 @@ import About from "../pages/About"
 import Contact from "../pages/Contact"
 import DoctorAddRecord from "../pages/DoctorAddRecord"
 import DoctorAnalysis from "../pages/DoctorAnalysis"
+import DoctorPatientAccess from "../pages/DoctorPatientAccess"
 import DoctorPatients from "../pages/DoctorPatients"
 import DoctorRecords from "../pages/DoctorRecords"
 import DoctorSchedule from "../pages/DoctorSchedule"
@@ -11,6 +12,7 @@ import Home from "../pages/Home"
 import Login from "../pages/Login"
 import PatientAppointments from "../pages/PatientAppointments"
 import PatientProfile from "../pages/PatientProfile"
+import PatientRecords from "../pages/PatientRecords"
 import PatientShare from "../pages/PatientShare"
 import Register from "../pages/Register"
 
@@ -24,9 +26,11 @@ function AppRoutes() {
       <Route path="/features" element={<Features />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/patient/profile" element={<PatientProfile />} />
+      <Route path="/patient/records" element={<PatientRecords />} />
       <Route path="/patient/appointment" element={<PatientAppointments />} />
       <Route path="/patient/share" element={<PatientShare />} />
       <Route path="/doctor/patients" element={<DoctorPatients />} />
+      <Route path="/doctor/patient-access" element={<DoctorPatientAccess />} />
       <Route path="/doctor/add-record" element={<DoctorAddRecord />} />
       <Route path="/doctor/records" element={<DoctorRecords />} />
       <Route path="/doctor/schedule" element={<DoctorSchedule />} />
