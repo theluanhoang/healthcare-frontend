@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import Sidebar from "../components/doctors/Sidebar"
 import { useSmartContract } from "../hooks"
+import useIpfs from "../hooks/useIPFS"
+import { toast } from "react-toastify"
 
 function DoctorPatientAccess() {
   const {
@@ -9,13 +11,17 @@ function DoctorPatientAccess() {
     getSharedRecordsByDoctor,
     getMedicalRecords,
     hasAccessToPatient,
-    isLoading,
+    isLoading: contractLoading,
   } = useSmartContract()
+  const { ipfs, getJson } = useIpfs()
 
   const [localAuthorizedPatients, setLocalAuthorizedPatients] = useState([])
   const [sharedRecords, setSharedRecords] = useState([])
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [patientRecords, setPatientRecords] = useState([])
+  const [selectedRecord, setSelectedRecord] = useState(null)
+  const [recordDetails, setRecordDetails] = useState(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,7 +83,26 @@ function DoctorPatientAccess() {
     }
   }
 
-  if (isLoading) {
+  const viewRecordDetails = async (record) => {
+    try {
+      setIsLoadingDetails(true)
+      setSelectedRecord(record)
+      const jsonData = await getJson(record.ipfsHash)
+      setRecordDetails(JSON.parse(jsonData))
+    } catch (error) {
+      console.error("Lỗi khi lấy chi tiết hồ sơ:", error)
+      toast.error("Không thể lấy chi tiết hồ sơ y tế.")
+    } finally {
+      setIsLoadingDetails(false)
+    }
+  }
+
+  const closeRecordModal = () => {
+    setSelectedRecord(null)
+    setRecordDetails(null)
+  }
+
+  if (contractLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
@@ -240,7 +265,7 @@ function DoctorPatientAccess() {
 
                               <div className="mt-3">
                                 <button
-                                  onClick={() => window.open(`https://ipfs.io/ipfs/${record.ipfsHash}`, "_blank")}
+                                  onClick={() => viewRecordDetails(record)}
                                   className="inline-flex items-center px-3 py-1 text-sm font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors duration-200"
                                 >
                                   <span className="mr-1">👁️</span>
@@ -306,17 +331,122 @@ function DoctorPatientAccess() {
 
                                 <div className="mt-3">
                                   <button
-                                    onClick={() => window.open(`https://ipfs.io/ipfs/${record.ipfsHash}`, "_blank")}
+                                    onClick={() => viewRecordDetails(record)}
                                     className="inline-flex items-center px-3 py-1 text-sm font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors duration-200"
                                   >
                                     <span className="mr-1">👁️</span>
-                                    Xem chi tiết trên IPFS
+                                    Xem chi tiết
                                   </button>
                                 </div>
                               </div>
                             ))}
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal xem chi tiết hồ sơ y tế */}
+              {selectedRecord && recordDetails && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                    <div className="p-6 border-b border-gray-200">
+                      <div className="flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-gray-800">Chi tiết hồ sơ y tế</h2>
+                        <button onClick={closeRecordModal} className="text-gray-500 hover:text-gray-700 text-2xl">
+                          ×
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-6">
+                      {/* Thông tin chung */}
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Thông tin chung</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Ngày khám</p>
+                            <p className="text-gray-700">{recordDetails.visitDate}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Bệnh nhân</p>
+                            <p className="text-gray-700">{selectedRecord.patientName}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Hiển thị từng loại record */}
+                      {recordDetails.records.map((record, index) => (
+                        <div key={index} className="mb-6 p-4 bg-gray-50 rounded-lg">
+                          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                            {record.recordType === "EXAMINATION_RECORD" && "Hồ sơ khám bệnh"}
+                            {record.recordType === "TEST_RESULT" && "Kết quả xét nghiệm"}
+                            {record.recordType === "PRESCRIPTION" && "Đơn thuốc"}
+                          </h3>
+
+                          {record.recordType === "EXAMINATION_RECORD" && (
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-sm text-gray-500">Triệu chứng</p>
+                                <p className="text-gray-700 whitespace-pre-line">{record.details.symptoms}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-500">Chẩn đoán</p>
+                                <p className="text-gray-700 whitespace-pre-line">{record.details.diagnosis}</p>
+                              </div>
+                              {record.details.notes && (
+                                <div>
+                                  <p className="text-sm text-gray-500">Ghi chú</p>
+                                  <p className="text-gray-700 whitespace-pre-line">{record.details.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {record.recordType === "TEST_RESULT" && (
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-sm text-gray-500">Loại xét nghiệm</p>
+                                <p className="text-gray-700">{record.details.testType}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-500">Kết quả</p>
+                                <p className="text-gray-700 whitespace-pre-line">{record.details.results}</p>
+                              </div>
+                              {record.details.comments && (
+                                <div>
+                                  <p className="text-sm text-gray-500">Nhận xét</p>
+                                  <p className="text-gray-700 whitespace-pre-line">{record.details.comments}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {record.recordType === "PRESCRIPTION" && (
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-sm text-gray-500 mb-2">Danh sách thuốc</p>
+                                <div className="space-y-3">
+                                  {record.details.medications.map((med, idx) => (
+                                    <div key={idx} className="p-3 bg-white rounded-lg border border-gray-200">
+                                      <p className="font-medium text-gray-800">{med.name}</p>
+                                      <p className="text-sm text-gray-600">Liều lượng: {med.dosage}</p>
+                                      <p className="text-sm text-gray-600">Hướng dẫn: {med.instructions}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              {record.details.notes && (
+                                <div>
+                                  <p className="text-sm text-gray-500">Ghi chú</p>
+                                  <p className="text-gray-700 whitespace-pre-line">{record.details.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

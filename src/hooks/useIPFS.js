@@ -66,7 +66,36 @@ const useIpfs = () => {
     }
   };
 
-  return { ipfs, uploadFile, uploadJson };
+  // Get JSON data from IPFS
+  const getJson = async (cid) => {
+    if (!ipfs) throw new Error("IPFS client chưa được khởi tạo.");
+    if (!cid) throw new Error("CID không được để trống.");
+
+    try {
+      console.log("Fetching JSON from IPFS, CID:", cid);
+      const stream = ipfs.cat(cid);
+      const chunks = [];
+      
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+      
+      const data = new TextDecoder().decode(chunks.reduce((prev, curr) => {
+        const temp = new Uint8Array(prev.length + curr.length);
+        temp.set(prev);
+        temp.set(curr, prev.length);
+        return temp;
+      }));
+
+      console.log("JSON data fetched from IPFS:", data);
+      return data;
+    } catch (error) {
+      console.error("Lỗi lấy dữ liệu từ IPFS:", error);
+      throw error;
+    }
+  };
+
+  return { ipfs, uploadFile, uploadJson, getJson };
 };
 
 export default useIpfs;
