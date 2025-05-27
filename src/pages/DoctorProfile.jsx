@@ -4,7 +4,7 @@ import { useSmartContract } from "../hooks";
 import { toast } from "react-toastify";
 
 function DoctorProfile() {
-  const { walletAddress, contract, getUser, getMedicalRecords, fetchAppointmentsByDoctor } = useSmartContract();
+  const { walletAddress, contract, getUser, getMedicalRecordsByDoctor, fetchAppointmentsByDoctor } = useSmartContract();
   const [profile, setProfile] = useState({
     fullName: "",
     email: "",
@@ -24,8 +24,7 @@ function DoctorProfile() {
 
     try {
       // Lấy tất cả hồ sơ y tế của bác sĩ
-      const records = await getMedicalRecords();
-      const doctorRecords = records.filter(record => record.doctor === walletAddress);
+      const doctorRecords = await getMedicalRecordsByDoctor(walletAddress);
       
       // Lấy danh sách bệnh nhân duy nhất
       const uniquePatients = new Set(doctorRecords.map(record => record.patient));
@@ -47,7 +46,7 @@ function DoctorProfile() {
       console.error("Lỗi khi lấy thông tin thống kê:", error);
       toast.error("Không thể lấy thông tin thống kê");
     }
-  }, [contract, walletAddress, getMedicalRecords, fetchAppointmentsByDoctor]);
+  }, [contract, walletAddress, getMedicalRecordsByDoctor, fetchAppointmentsByDoctor]);
 
   useEffect(() => {
     const fetchProfile = async () => {

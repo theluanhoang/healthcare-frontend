@@ -2,11 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useSmartContract } from "../hooks";
+import useIpfs from "../hooks/useIPFS";
 
 function DoctorVerify() {
   const { pendingDoctorRegistrations, fetchDoctors, voteForDoctor, contract, walletAddress } = useSmartContract();
+  const { ipfs } = useIpfs();
   const [isVerifiedDoctor, setIsVerifiedDoctor] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedCertificate, setSelectedCertificate] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [certificateLoading, setCertificateLoading] = useState(false);
 
   // Khởi tạo và kiểm tra trạng thái bác sĩ
   const init = useCallback(async () => {
@@ -47,6 +52,39 @@ function DoctorVerify() {
     },
     [voteForDoctor]
   );
+
+  // Xử lý xem chứng chỉ
+  const viewCertificate = useCallback(async (ipfsHash) => {
+    if (!ipfs) {
+      toast.error("IPFS client chưa sẵn sàng");
+      return;
+    }
+
+    setCertificateLoading(true);
+    try {
+      const response = await ipfs.get(ipfsHash);
+      let content = "";
+      for await (const chunk of response) {
+        content = URL.createObjectURL(new Blob([chunk], { type: 'image/jpeg' }));
+      }
+      setSelectedCertificate(content);
+      setShowModal(true);
+    } catch (error) {
+      console.error("Lỗi khi lấy chứng chỉ:", error);
+      toast.error("Không thể lấy chứng chỉ từ IPFS");
+    } finally {
+      setCertificateLoading(false);
+    }
+  }, [ipfs]);
+
+  // Cleanup URL khi đóng modal
+  useEffect(() => {
+    return () => {
+      if (selectedCertificate) {
+        URL.revokeObjectURL(selectedCertificate);
+      }
+    };
+  }, [selectedCertificate]);
 
   if (isLoading) {
     return (
@@ -175,12 +213,21 @@ function DoctorVerify() {
                                 : "Không xác định"}
                             </p>
                           </div>
-                          <button
-                            onClick={() => verifyDoctor(doctor.address)}
-                            className="px-6 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
-                          >
-                            Xác minh
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => viewCertificate(doctor.ipfsHash)}
+                              className="px-6 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-300"
+                              disabled={certificateLoading}
+                            >
+                              {certificateLoading ? "Đang tải..." : "Xem chứng chỉ"}
+                            </button>
+                            <button
+                              onClick={() => verifyDoctor(doctor.address)}
+                              className="px-6 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
+                            >
+                              Xác minh
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -191,6 +238,48 @@ function DoctorVerify() {
           </div>
         </div>
       </section>
+
+      {/* Modal xem chứng chỉ */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                      Chứng chỉ bác sĩ
+                    </h3>
+                    <div className="mt-2">
+                      <img
+                        src={selectedCertificate}
+                        alt="Chứng chỉ bác sĩ"
+                        className="w-full h-auto max-h-[70vh] object-contain"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => {
+                    setShowModal(false);
+                    setSelectedCertificate(null);
+                  }}
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
