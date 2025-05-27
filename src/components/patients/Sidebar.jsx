@@ -5,7 +5,6 @@ import {
   CalendarIcon,
   ChartBarIcon,
   DocumentTextIcon,
-  UserGroupIcon,
 } from "@heroicons/react/24/outline";
 
 function Sidebar() {
@@ -19,32 +18,27 @@ function Sidebar() {
     {
       name: "Trang chủ",
       icon: UserCircleIcon,
-      path: "/doctor/dashboard",
-    },
-    {
-      name: "Bệnh nhân",
-      icon: UserGroupIcon,
-      path: "/doctor/patients",
+      path: "/patient/dashboard",
     },
     {
       name: "Bệnh án",
       icon: ClipboardDocumentListIcon,
-      path: "/doctor/records",
+      path: "/patient/records",
     },
     {
       name: "Lịch hẹn",
       icon: CalendarIcon,
-      path: "/doctor/appointments",
-    },
-    {
-      name: "Phân tích dữ liệu",
-      icon: ChartBarIcon,
-      path: "/doctor/analysis",
+      path: "/patient/appointments",
     },
     {
       name: "Khảo sát & Phần thưởng",
-      icon: DocumentTextIcon,
+      icon: ChartBarIcon,
       path: "/surveys",
+    },
+    {
+      name: "Chia sẻ bệnh án",
+      icon: DocumentTextIcon,
+      path: "/patient/share",
     },
   ];
 
@@ -79,4 +73,4 @@ function Sidebar() {
   );
 }
 
-export default Sidebar;
+export default Sidebar; 

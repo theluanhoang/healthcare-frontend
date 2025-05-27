@@ -9,7 +9,7 @@ import { initWebSocket, sendWebSocketMessage, closeWebSocket } from "../utils/we
 
 export const SmartContractContext = createContext();
 
-const contractAddress = "0xf12895E620C96F615F64f8066B71c5C8dA5FB133";
+const contractAddress = "0xB2Bb3034FBb504459Abc272e20A324EdDA239267";
 
 export const SmartContractProvider = ({ children }) => {
   const [signer, setSigner] = useState(null);

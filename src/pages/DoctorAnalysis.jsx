@@ -9,7 +9,7 @@ import {
   Tooltip,
   ArcElement,
 } from "chart.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { Bar, Pie } from "react-chartjs-2";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -59,7 +59,7 @@ const getRecordTypeName = (type) => {
 };
 
 function DoctorAnalysis() {
-  const { contract } = useSmartContract();
+  const { contract, signer } = useSmartContract();
   const { getJson, ipfs } = useIpfs();
   
   const [loading, setLoading] = useState(true);
@@ -70,6 +70,8 @@ function DoctorAnalysis() {
     patientDetails: {},
   });
   const [filteredRecords, setFilteredRecords] = useState([]);
+  const initialized = useRef(false);
+  const isMounted = useRef(true);
   
   const {
     register,
@@ -85,27 +87,9 @@ function DoctorAnalysis() {
     },
   });
 
-  // Lấy thông tin bệnh nhân
-  const fetchPatientDetails = useCallback(async (address) => {
-    if (!contract || !address) return null;
-    try {
-      const patientData = await contract.getUser(address);
-      return {
-        address,
-        name: patientData[3],
-        phoneNumber: patientData[2],
-        email: patientData[4],
-        isActive: patientData[1],
-      };
-    } catch (error) {
-      console.error("Lỗi khi lấy thông tin bệnh nhân:", error);
-      return null;
-    }
-  }, [contract]);
-
-  // Lấy dữ liệu từ IPFS
+  // Memoize fetchIPFSData function
   const fetchIPFSData = useCallback(async (ipfsHash) => {
-    if (!ipfsHash || !getJson || !ipfs) return null;
+    if (!ipfsHash || !getJson) return null;
     try {
       const jsonData = await getJson(ipfsHash);
       return JSON.parse(jsonData);
@@ -113,41 +97,59 @@ function DoctorAnalysis() {
       console.error("Lỗi khi lấy dữ liệu từ IPFS:", error);
       return null;
     }
-  }, [getJson, ipfs]);
+  }, [getJson]);
 
   // Khởi tạo dữ liệu
   useEffect(() => {
+    // Cleanup function để tránh memory leak
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const initializeData = async () => {
-      if (!contract || !ipfs) return;
+      if (!contract || !ipfs || !signer || initialized.current || !isMounted.current) return;
 
       try {
+        initialized.current = true;
         setLoading(true);
-        // Lấy danh sách tất cả bệnh nhân
-        const patientAddresses = await contract.getAllPatients();
-        
-        // Lấy thông tin chi tiết của từng bệnh nhân
-        const patientDetailsMap = {};
-        const patientsData = await Promise.all(
-          patientAddresses.map(async (address) => {
-            const details = await fetchPatientDetails(address);
-            if (details) {
-              patientDetailsMap[address] = details;
-              return details;
-            }
-            return null;
-          })
-        );
 
-        // Lấy bệnh án của tất cả bệnh nhân
+        const doctorAddress = await signer.getAddress();
+        console.log("Fetching data for doctor:", doctorAddress);
+
+        const [patientAddresses, patientNames] = await contract.getAuthorizedPatients(doctorAddress);
+        console.log("Authorized patients:", patientAddresses.length);
+
+        if (!isMounted.current) return;
+
+        const patientDetailsMap = {};
+        const patientsData = patientAddresses.map((address, index) => {
+          const details = {
+            address,
+            name: patientNames[index],
+            isActive: true
+          };
+          patientDetailsMap[address] = details;
+          return details;
+        });
+
         const allRecords = [];
         const recordDetailsMap = {};
 
         await Promise.all(
           patientAddresses.map(async (address) => {
+            if (!isMounted.current) return;
+
+            const isAuthorized = await contract.hasAccessToPatient(address, doctorAddress);
+            if (!isAuthorized) return;
+
             const records = await contract.getMedicalRecords(address);
             if (Array.isArray(records)) {
               const formattedRecords = await Promise.all(
                 records.map(async (record, index) => {
+                  if (!isMounted.current) return null;
+
                   const ipfsData = await fetchIPFSData(record.ipfsHash);
                   if (ipfsData) {
                     recordDetailsMap[record.ipfsHash] = ipfsData;
@@ -163,13 +165,16 @@ function DoctorAnalysis() {
                   };
                 })
               );
-              allRecords.push(...formattedRecords);
+              allRecords.push(...formattedRecords.filter(Boolean));
             }
           })
         );
 
+        if (!isMounted.current) return;
+
+        console.log("Setting data with records:", allRecords.length);
         setData({
-          allPatients: patientsData.filter(Boolean),
+          allPatients: patientsData,
           medicalRecords: allRecords,
           recordDetails: recordDetailsMap,
           patientDetails: patientDetailsMap,
@@ -177,17 +182,72 @@ function DoctorAnalysis() {
         setFilteredRecords(allRecords);
       } catch (error) {
         console.error("Lỗi khi khởi tạo dữ liệu:", error);
-        toast.error("Không thể tải dữ liệu. Vui lòng thử lại sau.");
+        if (isMounted.current) {
+          toast.error("Không thể tải dữ liệu. Vui lòng thử lại sau.");
+        }
       } finally {
-        setLoading(false);
+        if (isMounted.current) {
+          setLoading(false);
+        }
       }
     };
 
     initializeData();
-  }, [contract, ipfs, fetchPatientDetails, fetchIPFSData]);
+  }, [contract, ipfs, signer]);
 
-  // Xử lý lọc dữ liệu
-  const onFilter = (filterData) => {
+  // Memoize chart data
+  const recordTypeChartData = useMemo(() => ({
+    labels: Object.values(RecordType)
+      .filter((type) => type !== RecordType.NONE)
+      .map(getRecordTypeName),
+    datasets: [
+      {
+        label: "Số lượng bệnh án",
+        data: Object.values(RecordType)
+          .filter((type) => type !== RecordType.NONE)
+          .map(
+            (type) =>
+              filteredRecords.filter((record) => record.recordType === type).length
+          ),
+        backgroundColor: [
+          "rgba(99, 102, 241, 0.6)",
+          "rgba(52, 211, 153, 0.6)",
+          "rgba(251, 146, 60, 0.6)",
+        ],
+        borderColor: [
+          "rgba(99, 102, 241, 1)",
+          "rgba(52, 211, 153, 1)",
+          "rgba(251, 146, 60, 1)",
+        ],
+        borderWidth: 1,
+      },
+    ],
+  }), [filteredRecords]);
+
+  // Memoize timeline data
+  const timelineChartData = useMemo(() => ({
+    labels: filteredRecords
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .slice(-10)
+      .map((record) =>
+        new Date(record.timestamp * 1000).toLocaleDateString("vi-VN")
+      ),
+    datasets: [
+      {
+        label: "Số lượng bệnh án",
+        data: filteredRecords
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .slice(-10)
+          .map(() => 1),
+        backgroundColor: "rgba(99, 102, 241, 0.6)",
+        borderColor: "rgba(99, 102, 241, 1)",
+        borderWidth: 1,
+      },
+    ],
+  }), [filteredRecords]);
+
+  // Memoize filter function
+  const onFilter = useCallback((filterData) => {
     const { patientName, dateFrom, dateTo, recordType } = filterData;
     let filtered = [...data.medicalRecords];
 
@@ -215,58 +275,7 @@ function DoctorAnalysis() {
     }
 
     setFilteredRecords(filtered);
-  };
-
-  // Dữ liệu cho biểu đồ số lượng bệnh án theo loại
-  const recordTypeChartData = {
-    labels: Object.values(RecordType)
-      .filter((type) => type !== RecordType.NONE)
-      .map(getRecordTypeName),
-    datasets: [
-      {
-        label: "Số lượng bệnh án",
-        data: Object.values(RecordType)
-          .filter((type) => type !== RecordType.NONE)
-          .map(
-            (type) =>
-              filteredRecords.filter((record) => record.recordType === type).length
-          ),
-        backgroundColor: [
-          "rgba(99, 102, 241, 0.6)",
-          "rgba(52, 211, 153, 0.6)",
-          "rgba(251, 146, 60, 0.6)",
-        ],
-        borderColor: [
-          "rgba(99, 102, 241, 1)",
-          "rgba(52, 211, 153, 1)",
-          "rgba(251, 146, 60, 1)",
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  // Dữ liệu cho biểu đồ số lượng bệnh án theo thời gian
-  const timelineChartData = {
-    labels: filteredRecords
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .slice(-10)
-      .map((record) =>
-        new Date(record.timestamp * 1000).toLocaleDateString("vi-VN")
-      ),
-    datasets: [
-      {
-        label: "Số lượng bệnh án",
-        data: filteredRecords
-          .sort((a, b) => a.timestamp - b.timestamp)
-          .slice(-10)
-          .map(() => 1),
-        backgroundColor: "rgba(99, 102, 241, 0.6)",
-        borderColor: "rgba(99, 102, 241, 1)",
-        borderWidth: 1,
-      },
-    ],
-  };
+  }, [data.medicalRecords, data.patientDetails]);
 
   if (loading) {
     return (
