@@ -16,6 +16,7 @@ export const menuItems = {
     { path: "/patient/share", label: "Chia sẻ dữ liệu" },
   ],
   doctor: [
+    { path: "/doctor/profile", label: "Hồ sơ" },
     { path: "/doctor/patients", label: "Bệnh nhân" },
     { path: "/doctor/patient-access", label: "Quyền truy cập" },
     { path: "/doctor/add-record", label: "Thêm hồ sơ" },

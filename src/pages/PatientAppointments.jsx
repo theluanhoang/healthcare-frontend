@@ -86,17 +86,29 @@ function PatientAppointments() {
 
   const onSubmit = async (data) => {
     try {
-      await bookAppointment(data.doctor, Number.parseInt(data.slotId), data.reason)
-      reset()
-      setAvailableSlots([])
+      // Get the selected slot details
+      const selectedSlot = availableSlots.find(slot => slot.slotId.toString() === data.slotId);
+      if (!selectedSlot) {
+        throw new Error("Không tìm thấy thông tin slot đã chọn");
+      }
+
+      await bookAppointment(
+        data.doctor,
+        selectedSlot.date,
+        selectedSlot.startTime,
+        data.reason
+      );
+      
+      reset();
+      setAvailableSlots([]);
 
       // Refresh appointments
-      const updatedAppointments = await fetchAppointmentsByPatient()
-      setLocalAppointments(updatedAppointments)
+      const updatedAppointments = await fetchAppointmentsByPatient();
+      setLocalAppointments(updatedAppointments);
     } catch (error) {
-      console.error("Lỗi đặt lịch:", error)
+      console.error("Lỗi đặt lịch:", error);
     }
-  }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {

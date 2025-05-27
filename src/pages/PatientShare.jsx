@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { Link } from "react-router-dom"
 import { toast } from "react-toastify"
@@ -16,6 +16,31 @@ const shareSchema = z.object({
 const accessSchema = z.object({
   doctorAddress: z.string().min(1, "Vui lòng chọn bác sĩ"),
 })
+
+const ApproveButton = ({ onClick, isLoading }) => (
+  <button
+    onClick={onClick}
+    disabled={isLoading}
+    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg shadow-sm hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transform transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+  >
+    {isLoading ? (
+      <>
+        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Đang xử lý...
+      </>
+    ) : (
+      <>
+        <svg className="-ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        Phê duyệt
+      </>
+    )}
+  </button>
+);
 
 function PatientShare() {
   const {
@@ -35,6 +60,7 @@ function PatientShare() {
   const [medicalRecords, setMedicalRecords] = useState([])
   const [pendingRecords, setPendingRecords] = useState([])
   const [activeTab, setActiveTab] = useState("approve")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     const init = async () => {
@@ -163,30 +189,39 @@ function PatientShare() {
     }
   };
 
-  const approveRecord = async (recordIndex) => {
+  const handleApprove = useCallback(async (recordIndex) => {
+    if (isSubmitting) return; // Prevent multiple submissions
+    
     try {
-      // Lấy danh sách tất cả hồ sơ y tế để tìm index thực tế
-      const allRecords = await getMedicalRecords();
-      const pendingRecord = pendingRecords[recordIndex];
+      setIsSubmitting(true);
+      console.log("Attempting to approve record with index:", recordIndex);
       
-      // Tìm index thực tế trong danh sách tất cả hồ sơ
-      const actualIndex = allRecords.findIndex(
-        (record) => 
-          record.ipfsHash === pendingRecord.ipfsHash && 
-          record.doctor === pendingRecord.doctor &&
-          record.timestamp === pendingRecord.timestamp
-      );
-
-      if (actualIndex === -1) {
-        throw new Error("Không tìm thấy hồ sơ y tế");
+      // Kiểm tra xem record có trong danh sách pending không
+      const record = pendingRecords.find(r => r.recordIndex === recordIndex);
+      if (!record) {
+        toast.error("Hồ sơ không tồn tại hoặc đã được phê duyệt");
+        return;
       }
 
-      await approveMedicalRecord(actualIndex);
+      await approveMedicalRecord(recordIndex);
+      
+      // Cập nhật UI ngay lập tức
+      setPendingRecords(prev => prev.filter(r => r.recordIndex !== recordIndex));
+      
+      // Cập nhật danh sách hồ sơ từ blockchain
+      await Promise.all([
+        getPendingRecords(),
+        getMedicalRecords()
+      ]);
+      
+      toast.success("Phê duyệt hồ sơ thành công!");
     } catch (error) {
       console.error("Lỗi phê duyệt hồ sơ:", error);
-      toast.error(error.message || "Không thể phê duyệt hồ sơ y tế.");
+      toast.error(error.message || "Không thể phê duyệt hồ sơ.");
+    } finally {
+      setIsSubmitting(false);
     }
-  };
+  }, [approveMedicalRecord, getPendingRecords, getMedicalRecords, pendingRecords, isSubmitting]);
 
   const recordTypeToString = (type) => {
     switch (Number(type)) {
@@ -299,31 +334,67 @@ function PatientShare() {
                     {pendingRecords.length === 0 ? (
                       <p className="text-gray-600 text-center">Chưa có hồ sơ nào chờ phê duyệt.</p>
                     ) : (
-                      <div className="space-y-4">
-                        {pendingRecords.map((record, index) => (
-                          <div
-                            key={index}
-                            className="p-4 bg-gray-50 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <h3 className="text-lg font-semibold text-gray-800">
-                                  {record.doctorName || record.doctor}
-                                </h3>
-                                <p className="text-gray-600">{recordTypeToString(record.recordType)}</p>
-                                <p className="text-gray-600">
-                                  Ngày đề xuất: {new Date(record.timestamp * 1000).toISOString().split("T")[0]}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => approveRecord(index)}
-                                className="px-3 py-1 text-sm font-medium rounded-full bg-indigo-600 text-white hover:bg-indigo-700"
-                              >
-                                Phê duyệt
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-6">Hồ sơ chờ phê duyệt</h2>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bác sĩ</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày tạo</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại hồ sơ</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {pendingRecords.map((record, index) => (
+                                <tr key={record.recordIndex} className="hover:bg-gray-50 transition-colors duration-200">
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center">
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-900">{record.doctorName}</div>
+                                        <div className="text-sm text-gray-500">
+                                          {record.doctor.slice(0, 6)}...{record.doctor.slice(-4)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm text-gray-900">
+                                      {new Date(record.timestamp * 1000).toLocaleDateString()}
+                                    </div>
+                                    <div className="text-sm text-gray-500">
+                                      {new Date(record.timestamp * 1000).toLocaleTimeString()}
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                      record.recordType === 1 ? 'bg-blue-100 text-blue-800' :
+                                      record.recordType === 2 ? 'bg-green-100 text-green-800' :
+                                      'bg-purple-100 text-purple-800'
+                                    }`}>
+                                      {record.recordType === 1 ? 'Khám bệnh' :
+                                       record.recordType === 2 ? 'Xét nghiệm' :
+                                       'Đơn thuốc'}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
+                                    <button
+                                      onClick={() => viewRecord(record.ipfsHash)}
+                                      className="text-indigo-600 hover:text-indigo-900 font-medium"
+                                    >
+                                      Xem chi tiết
+                                    </button>
+                                    <ApproveButton
+                                      onClick={() => handleApprove(record.recordIndex)}
+                                      isLoading={isSubmitting}
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>

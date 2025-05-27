@@ -69,10 +69,7 @@ function DoctorAddRecord() {
   const {
     patients,
     fetchPatients,
-    pendingDoctorRegistrations,
-    fetchDoctors,
     addMedicalRecord,
-    voteForDoctor,
     contract,
     walletAddress,
   } = useSmartContract();
@@ -137,9 +134,8 @@ function DoctorAddRecord() {
   const init = useCallback(async () => {
     try {
       console.log("Running init...");
-      await Promise.all([fetchPatients(), fetchDoctors()]);
+      await fetchPatients();
       console.log("Patients in DoctorAddRecord:", patients);
-      console.log("Pending doctors:", pendingDoctorRegistrations);
       if (contract && walletAddress) {
         const user = await contract.getUser(walletAddress);
         setIsVerifiedDoctor(user[1] && user[0].toString() === "2");
@@ -148,63 +144,13 @@ function DoctorAddRecord() {
       console.error("Lỗi khi lấy dữ liệu:", error);
       toast.error("Không thể lấy dữ liệu từ blockchain.");
     }
-  }, [fetchPatients, fetchDoctors, contract, walletAddress]);
+  }, [fetchPatients, contract, walletAddress]);
 
   useEffect(() => {
     if (walletAddress && contract) {
       init();
     }
   }, [walletAddress, contract, init]);
-
-  // Memoized event handlers
-  const userListener = useCallback(
-    async (userAddress, role, fullName) => {
-      console.log("UserRegistered event:", { userAddress, role: role.toString(), fullName });
-      if (role.toString() === "1") {
-        await fetchPatients();
-        toast.info(`Bệnh nhân mới đăng ký: ${fullName}`);
-      } else if (role.toString() === "2") {
-        await fetchDoctors();
-        toast.info(`Bác sĩ mới đăng ký: ${fullName}. Vui lòng xác minh!`);
-      }
-    },
-    [fetchPatients, fetchDoctors]
-  );
-
-  const verifiedListener = useCallback(
-    async (doctorAddress, fullName) => {
-      console.log("DoctorVerified event:", { doctorAddress, fullName });
-      await fetchDoctors();
-      toast.success(`Bác sĩ ${fullName} đã được xác minh!`);
-    },
-    [fetchDoctors]
-  );
-
-  const recordAddedListener = useCallback(
-    async (recordIndex, patient, doctor, ipfsHash) => {
-      console.log("MedicalRecordAdded:", { recordIndex, patient, doctor, ipfsHash });
-      toast.success(`Hồ sơ y tế ${recordIndex} đã được thêm, chờ bệnh nhân phê duyệt!`);
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!contract || !isVerifiedDoctor) return;
-
-    const userFilter = contract.filters.UserRegistered(null, null);
-    const verifiedFilter = contract.filters.DoctorVerified(null);
-    const recordAddedFilter = contract.filters.MedicalRecordAdded(null, null, walletAddress);
-
-    contract.on(userFilter, userListener);
-    contract.on(verifiedFilter, verifiedListener);
-    contract.on(recordAddedFilter, recordAddedListener);
-
-    return () => {
-      contract.off(userFilter, userListener);
-      contract.off(verifiedFilter, verifiedListener);
-      contract.off(recordAddedFilter, recordAddedListener);
-    };
-  }, [contract, isVerifiedDoctor, walletAddress, userListener, verifiedListener, recordAddedListener]);
 
   const onSubmit = useCallback(
     async (data) => {
@@ -262,8 +208,24 @@ function DoctorAddRecord() {
         const cid = await uploadJson(JSON.stringify(combinedRecord));
         console.log("JSON uploaded to IPFS, CID:", cid);
 
-        // Thêm bản ghi vào blockchain
-        await addMedicalRecord(data.patient, cid, 1); // recordType 1 cho bản ghi gộp
+        // Xác định loại hồ sơ từ records
+        let recordType = 1; // Mặc định là EXAMINATION_RECORD
+        if (combinedRecord.records.length > 0) {
+          switch (combinedRecord.records[0].recordType) {
+            case "EXAMINATION_RECORD":
+              recordType = 1;
+              break;
+            case "TEST_RESULT":
+              recordType = 2;
+              break;
+            case "PRESCRIPTION":
+              recordType = 3;
+              break;
+          }
+        }
+
+        // Thêm bản ghi vào blockchain với recordType
+        await addMedicalRecord(data.patient, cid, recordType);
         toast.success("Hồ sơ y tế đã được thêm thành công!");
 
         reset();
@@ -283,18 +245,6 @@ function DoctorAddRecord() {
       }
     },
     [ipfs, uploadJson, walletAddress, addMedicalRecord, reset, isVerifiedDoctor]
-  );
-
-  const verifyDoctor = useCallback(
-    async (doctorAddress) => {
-      try {
-        await voteForDoctor(doctorAddress);
-      } catch (error) {
-        console.error("Lỗi xác minh bác sĩ:", error);
-        toast.error(error.message || "Không thể xác minh bác sĩ.");
-      }
-    },
-    [voteForDoctor]
   );
 
   // Debug IPFS, uploading, and form state
@@ -319,7 +269,7 @@ function DoctorAddRecord() {
         <div className="container mx-auto px-6 text-center">
           <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">Quản lý hồ sơ y tế</h1>
           <p className="text-lg md:text-xl text-gray-200">
-            Thêm hồ sơ y tế cho bệnh nhân và xác minh bác sĩ mới.
+            Thêm hồ sơ y tế cho bệnh nhân
           </p>
         </div>
       </section>
@@ -354,47 +304,18 @@ function DoctorAddRecord() {
                     Hồ sơ y tế
                   </Link>
                 </li>
+                <li>
+                  <Link
+                    to="/doctor/verify"
+                    className="block py-2 px-4 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200"
+                  >
+                    Xác minh bác sĩ
+                  </Link>
+                </li>
               </ul>
             </div>
 
             <div className="lg:w-3/4">
-              <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">Xác minh bác sĩ mới</h2>
-                {pendingDoctorRegistrations.length === 0 ? (
-                  <p className="text-gray-600 text-center">Chưa có bác sĩ nào chờ xác minh.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {pendingDoctorRegistrations.map((doctor) => (
-                      <div
-                        key={doctor.address}
-                        className="p-4 bg-gray-50 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-800">{doctor.fullName}</h3>
-                            <p className="text-gray-600">
-                              Địa chỉ: {doctor.address.slice(0, 6)}...{doctor.address.slice(-4)}
-                            </p>
-                            <p className="text-gray-600">
-                              Ngày đăng ký:{" "}
-                              {doctor.timestamp && !isNaN(doctor.timestamp)
-                                ? new Date(doctor.timestamp).toISOString().split("T")[0]
-                                : "Không xác định"}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => verifyDoctor(doctor.address)}
-                            className="px-3 py-1 text-sm font-medium rounded-full bg-indigo-600 text-white hover:bg-indigo-700"
-                          >
-                            Xác minh
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
                 <h2 className="text-2xl font-bold text-gray-800 mb-6">Thêm hồ sơ y tế</h2>
                 <form

@@ -5,10 +5,11 @@ import { createContext, useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "react-toastify";
 import HealthcareABI from "../contracts/HealthcareABI.json";
 import { eventHandler } from "../utils/EventHandler";
+import { initWebSocket, sendWebSocketMessage, closeWebSocket } from "../utils/websocketUtils";
 
 export const SmartContractContext = createContext();
 
-const contractAddress = "0x809B386e8b024D42aa8fBB951dFc0366E4e69c6f";
+const contractAddress = "0xd7e41DB1C801faa5A333fD7402C4b82a6a890dD9";
 
 export const SmartContractProvider = ({ children }) => {
   const [signer, setSigner] = useState(null);
@@ -483,25 +484,66 @@ export const SmartContractProvider = ({ children }) => {
       }
 
       try {
+        console.log("Getting pending records for patient:", patientAddress);
         const records = await contract.getPendingRecords(patientAddress);
+        
+        // Custom replacer function để xử lý BigInt
+        const replacer = (key, value) =>
+          typeof value === 'bigint' ? value.toString() : value;
+        
+        console.log("Raw pending records:", JSON.stringify(records, replacer, 2));
+
+        // Log cấu trúc của record đầu tiên nếu có
+        if (records && records.length > 0) {
+          const firstRecord = records[0];
+          console.log("First record structure:", {
+            keys: Object.keys(firstRecord),
+            values: Object.entries(firstRecord).reduce((acc, [key, value]) => {
+              acc[key] = typeof value === 'bigint' ? value.toString() : value;
+              return acc;
+            }, {}),
+            prototype: Object.getPrototypeOf(firstRecord)
+          });
+        }
+
         const formattedRecords = await Promise.all(
           records.map(async (record, index) => {
-            const doctorInfo = await getUser(record.doctor);
-            return {
-              recordIndex: index.toString(),
-              ipfsHash: record.ipfsHash,
-              patient: record.patient,
-              doctor: record.doctor,
-              doctorName: doctorInfo.fullName,
-              recordType: Number(record.recordType),
-              timestamp: Number(record.timestamp),
-            };
-          }),
+            try {
+              console.log(`Processing record ${index}:`, JSON.stringify(record, replacer));
+              const doctorInfo = await getUser(record.doctor);
+              
+              // Tìm index thực trong mảng medicalRecords
+              const allRecords = await contract.getAllMedicalRecords();
+              const recordIndex = allRecords.findIndex(
+                r => r.patient === record.patient &&
+                     r.doctor === record.doctor &&
+                     r.ipfsHash === record.ipfsHash &&
+                     !r.isApproved
+              );
+              
+              return {
+                recordIndex: recordIndex.toString(),
+                ipfsHash: record.ipfsHash,
+                patient: record.patient,
+                doctor: record.doctor,
+                doctorName: doctorInfo.fullName,
+                recordType: Number(record.recordType),
+                timestamp: Number(record.timestamp),
+              };
+            } catch (error) {
+              console.error(`Error formatting record ${index}:`, error);
+              console.error("Record data:", JSON.stringify(record, replacer));
+              return null;
+            }
+          })
         );
-        console.log("Hồ sơ chờ phê duyệt:", formattedRecords);
-        return formattedRecords;
+
+        // Filter out any null records from formatting errors
+        const validRecords = formattedRecords.filter(record => record !== null);
+        console.log("Final formatted records:", JSON.stringify(validRecords, replacer));
+        return validRecords;
       } catch (error) {
-        console.error("Lỗi lấy hồ sơ chờ phê duyệt:", JSON.stringify(error, null, 2));
+        console.error("Lỗi lấy hồ sơ chờ phê duyệt:", error);
         const errorMsg = "Không thể lấy hồ sơ chờ phê duyệt.";
         setError(errorMsg);
         throw new Error(errorMsg);
@@ -519,9 +561,19 @@ export const SmartContractProvider = ({ children }) => {
       }
 
       try {
+        console.log("Adding medical record with params:", { patientAddress, ipfsHash, recordType });
         const tx = await contract.addMedicalRecord(patientAddress, ipfsHash, recordType);
         await tx.wait();
         toast.success("Thêm hồ sơ y tế thành công!");
+        
+        // Send WebSocket notification
+        sendWebSocketMessage({
+          type: 'NEW_RECORD',
+          patientAddress: patientAddress,
+          doctorAddress: walletAddress
+        });
+        
+        return true;
       } catch (error) {
         console.error("Lỗi thêm hồ sơ y tế:", JSON.stringify(error, null, 2));
         let errorMsg = "Không thể thêm hồ sơ y tế.";
@@ -534,10 +586,40 @@ export const SmartContractProvider = ({ children }) => {
         }
         setError(errorMsg);
         toast.error(errorMsg);
-        throw new Error(errorMsg);
+        throw error;
       }
     },
-    [contract, walletAddress],
+    [contract, walletAddress]
+  );
+
+  const approveRecord = useCallback(
+    async (recordId) => {
+      if (!contract || !walletAddress) {
+        const errorMsg = "Hợp đồng hoặc ví chưa sẵn sàng.";
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      try {
+        const tx = await contract.approveRecord(recordId);
+        await tx.wait();
+        toast.success("Phê duyệt hồ sơ thành công!");
+
+        // Send WebSocket notification
+        sendWebSocketMessage({
+          type: 'RECORD_APPROVED',
+          recordId: recordId,
+          patientAddress: walletAddress
+        });
+
+        return true;
+      } catch (error) {
+        console.error("Lỗi phê duyệt hồ sơ:", error);
+        toast.error("Không thể phê duyệt hồ sơ.");
+        throw error;
+      }
+    },
+    [contract, walletAddress]
   );
 
   const approveMedicalRecord = useCallback(
@@ -549,25 +631,63 @@ export const SmartContractProvider = ({ children }) => {
       }
 
       try {
-        const tx = await contract.approveMedicalRecord(recordIndex);
-        await tx.wait();
-        toast.success("Phê duyệt hồ sơ y tế thành công!");
-      } catch (error) {
-        console.error("Lỗi phê duyệt hồ sơ y tế:", JSON.stringify(error, null, 2));
-        let errorMsg = "Không thể phê duyệt hồ sơ y tế.";
-        if (error.reason?.includes("InvalidRecordIndex")) {
-          errorMsg = "Chỉ số hồ sơ không hợp lệ.";
-        } else if (error.reason?.includes("OnlyPatientCanApprove")) {
-          errorMsg = "Chỉ bệnh nhân mới có thể phê duyệt hồ sơ.";
-        } else if (error.reason?.includes("RecordAlreadyApproved")) {
-          errorMsg = "Hồ sơ đã được phê duyệt trước đó.";
+        console.log("Approving medical record with index:", recordIndex);
+        
+        // Kiểm tra xem record có tồn tại không
+        const pendingRecords = await getPendingRecords(walletAddress);
+        const record = pendingRecords.find(r => r.recordIndex === recordIndex);
+        
+        if (!record) {
+          throw new Error("Hồ sơ không tồn tại hoặc đã được phê duyệt");
         }
+
+        // Gửi giao dịch
+        const tx = await contract.approveMedicalRecord(recordIndex);
+        console.log("Transaction sent:", tx.hash);
+        
+        const receipt = await tx.wait();
+        console.log("Transaction confirmed:", receipt);
+        
+        toast.success("Phê duyệt hồ sơ y tế thành công!");
+
+        // Gửi WebSocket notification
+        sendWebSocketMessage({
+          type: 'RECORD_APPROVED',
+          recordId: recordIndex,
+          patientAddress: walletAddress
+        });
+
+        // Cập nhật danh sách hồ sơ
+        await Promise.all([
+          getMedicalRecords(walletAddress),
+          getPendingRecords(walletAddress)
+        ]);
+
+        return true;
+      } catch (error) {
+        console.error("Lỗi phê duyệt hồ sơ y tế:", error);
+        let errorMsg = "Không thể phê duyệt hồ sơ y tế.";
+        
+        if (error.reason) {
+          if (error.reason.includes("InvalidRecordIndex")) {
+            errorMsg = "Chỉ số hồ sơ không hợp lệ.";
+          } else if (error.reason.includes("OnlyPatientCanApprove")) {
+            errorMsg = "Chỉ bệnh nhân mới có thể phê duyệt hồ sơ.";
+          } else if (error.reason.includes("RecordAlreadyApproved")) {
+            errorMsg = "Hồ sơ đã được phê duyệt trước đó.";
+          }
+        } else if (error.code === 'ACTION_REJECTED') {
+          errorMsg = "Giao dịch đã bị từ chối.";
+        } else if (error.message.includes("missing revert data")) {
+          errorMsg = "Hồ sơ không tồn tại hoặc đã được phê duyệt.";
+        }
+        
         setError(errorMsg);
         toast.error(errorMsg);
         throw new Error(errorMsg);
       }
     },
-    [contract, walletAddress],
+    [contract, walletAddress, getMedicalRecords, getPendingRecords],
   );
 
   const shareMedicalRecord = useCallback(
@@ -778,25 +898,45 @@ export const SmartContractProvider = ({ children }) => {
       }
 
       try {
+        console.log("Booking appointment with params:", { doctorAddress, date, time, reason });
+        
+        // Kiểm tra thông tin bác sĩ
+        const doctorInfo = await getUser(doctorAddress);
+        if (!doctorInfo.isVerified) {
+          throw new Error("Bác sĩ chưa được xác minh");
+        }
+
         const tx = await contract.bookAppointment(doctorAddress, date, time, reason);
-        await tx.wait();
+        console.log("Transaction sent:", tx.hash);
+        
+        const receipt = await tx.wait();
+        console.log("Transaction confirmed:", receipt);
+        
         toast.success("Đặt lịch hẹn thành công!");
         await fetchAppointmentsByPatient();
         await fetchAvailabilitySlots(doctorAddress);
       } catch (error) {
         console.error("Lỗi đặt lịch hẹn:", JSON.stringify(error, null, 2));
         let errorMsg = "Không thể đặt lịch hẹn.";
-        if (error.reason?.includes("OnlyVerifiedPatient")) {
-          errorMsg = "Chỉ bệnh nhân đã xác minh mới có thể đặt lịch.";
-        } else if (error.reason?.includes("InvalidDoctor")) {
-          errorMsg = "Bác sĩ không hợp lệ hoặc chưa xác minh.";
+        
+        if (error.reason) {
+          if (error.reason.includes("OnlyVerifiedPatient")) {
+            errorMsg = "Chỉ bệnh nhân đã xác minh mới có thể đặt lịch.";
+          } else if (error.reason.includes("InvalidDoctor")) {
+            errorMsg = "Bác sĩ không hợp lệ hoặc chưa xác minh.";
+          }
+        } else if (error.code === 'ACTION_REJECTED') {
+          errorMsg = "Giao dịch đã bị từ chối.";
+        } else if (error.message) {
+          errorMsg = error.message;
         }
+        
         setError(errorMsg);
         toast.error(errorMsg);
         throw new Error(errorMsg);
       }
     },
-    [contract, walletAddress, fetchAppointmentsByPatient, fetchAvailabilitySlots],
+    [contract, walletAddress, getUser, fetchAppointmentsByPatient, fetchAvailabilitySlots],
   );
 
   const updateAppointmentStatus = useCallback(
@@ -984,7 +1124,7 @@ export const SmartContractProvider = ({ children }) => {
 
     return () => {
       if (contract || walletAddress) {
-        console.log("🧹 Cleaning lên EventHandler trên dependency change...");
+        console.log("🧹 Cleaning up EventHandler...");
         eventHandler.cleanup();
       }
     };
@@ -1011,6 +1151,35 @@ export const SmartContractProvider = ({ children }) => {
     fetchAppointmentsByPatient,
     fetchAuthorizedPatients,
   ]);
+
+  useEffect(() => {
+    // Initialize WebSocket when component mounts
+    const ws = initWebSocket();
+    
+    ws.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'NEW_RECORD' && data.patientAddress === walletAddress) {
+          toast.info('Bạn có hồ sơ y tế mới cần phê duyệt');
+          // Cập nhật danh sách hồ sơ chờ phê duyệt
+          await getPendingRecords(walletAddress);
+        } 
+        else if (data.type === 'RECORD_APPROVED' && data.doctorAddress === walletAddress) {
+          toast.success('Một hồ sơ y tế đã được phê duyệt');
+          // Cập nhật danh sách hồ sơ của bác sĩ
+          await getMedicalRecordsByDoctor(walletAddress);
+        }
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+      }
+    };
+
+    // Cleanup WebSocket connection
+    return () => {
+      closeWebSocket();
+    };
+  }, [walletAddress, getPendingRecords, getMedicalRecordsByDoctor]);
 
   const contextValue = useMemo(
     () => ({
@@ -1052,6 +1221,7 @@ export const SmartContractProvider = ({ children }) => {
       pendingDoctorRegistrations,
       notifications,
       isLoading,
+      approveRecord,
     }),
     [
       contract,
@@ -1092,6 +1262,7 @@ export const SmartContractProvider = ({ children }) => {
       hasAccessToPatient,
       fetchAuthorizedPatients,
       getSharedRecordsByDoctor,
+      approveRecord,
     ],
   );
 

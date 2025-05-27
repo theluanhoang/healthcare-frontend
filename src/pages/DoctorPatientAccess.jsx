@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Sidebar from "../components/doctors/Sidebar"
 import { useSmartContract } from "../hooks"
 import useIpfs from "../hooks/useIPFS"
+import useWebSocket from "../hooks/useWebSocket"
 import { toast } from "react-toastify"
 
 function DoctorPatientAccess() {
@@ -12,6 +13,7 @@ function DoctorPatientAccess() {
     getMedicalRecords,
     hasAccessToPatient,
     isLoading: contractLoading,
+    addMedicalRecord,
   } = useSmartContract()
   const { ipfs, getJson } = useIpfs()
 
@@ -24,21 +26,52 @@ function DoctorPatientAccess() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [selectedTab, setSelectedTab] = useState("EXAMINATION_RECORD")
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (walletAddress) {
-        try {
-          const [patients, shared] = await Promise.all([fetchAuthorizedPatients(), getSharedRecordsByDoctor()])
-          setLocalAuthorizedPatients(patients)
-          setSharedRecords(shared)
-        } catch (error) {
-          console.error("Lỗi tải dữ liệu:", error)
-        }
+  // Xử lý WebSocket message
+  const handleWebSocketMessage = useCallback((data) => {
+    if (data.type === 'RECORD_APPROVED' && data.doctorAddress === walletAddress) {
+      // Hồ sơ đã được phê duyệt
+      toast.success('Một hồ sơ y tế đã được phê duyệt');
+      fetchData(); // Cập nhật lại danh sách
+    }
+  }, [walletAddress]);
+
+  // Khởi tạo WebSocket
+  const { sendMessage } = useWebSocket(handleWebSocketMessage);
+
+  // Di chuyển hàm fetchData ra ngoài useEffect
+  const fetchData = useCallback(async () => {
+    if (walletAddress) {
+      try {
+        const [patients, shared] = await Promise.all([fetchAuthorizedPatients(), getSharedRecordsByDoctor()])
+        setLocalAuthorizedPatients(patients)
+        setSharedRecords(shared)
+      } catch (error) {
+        console.error("Lỗi tải dữ liệu:", error)
       }
     }
+  }, [walletAddress, fetchAuthorizedPatients, getSharedRecordsByDoctor]);
 
+  useEffect(() => {
     fetchData()
-  }, [walletAddress, fetchAuthorizedPatients, getSharedRecordsByDoctor])
+  }, [fetchData])
+
+  // Thêm hàm xử lý khi thêm hồ sơ mới
+  const handleAddRecord = async (patientAddress, recordData) => {
+    try {
+      await addMedicalRecord(patientAddress, recordData);
+      // Gửi thông báo qua WebSocket
+      sendMessage({
+        type: 'NEW_RECORD',
+        patientAddress: patientAddress
+      });
+      // Cập nhật lại danh sách
+      fetchData();
+      toast.success('Thêm hồ sơ thành công');
+    } catch (error) {
+      console.error('Lỗi khi thêm hồ sơ:', error);
+      toast.error('Không thể thêm hồ sơ');
+    }
+  };
 
   const handleViewPatientRecords = async (patient) => {
     try {

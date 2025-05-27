@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { useSmartContract } from "../hooks"
 import useIpfs from "../hooks/useIPFS"
+import useWebSocket from "../hooks/useWebSocket"
 import { toast } from "react-toastify"
 
 function PatientRecords() {
@@ -16,20 +17,52 @@ function PatientRecords() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [selectedTab, setSelectedTab] = useState("EXAMINATION_RECORD")
 
-  useEffect(() => {
-    const fetchRecords = async () => {
-      if (walletAddress) {
-        try {
-          const records = await getMedicalRecords()
-          setMedicalRecords(records)
-        } catch (error) {
-          console.error("Lỗi tải hồ sơ y tế:", error)
-        }
+  // Xử lý WebSocket message
+  const handleWebSocketMessage = useCallback((data) => {
+    if (data.type === 'NEW_RECORD' && data.patientAddress === walletAddress) {
+      // Có hồ sơ mới được thêm cho bệnh nhân này
+      toast.info('Bạn có hồ sơ y tế mới cần phê duyệt');
+      fetchRecords(); // Gọi lại hàm fetch records
+    }
+  }, [walletAddress]);
+
+  // Khởi tạo WebSocket
+  const { sendMessage } = useWebSocket(handleWebSocketMessage);
+
+  // Di chuyển hàm fetchRecords ra ngoài useEffect
+  const fetchRecords = useCallback(async () => {
+    if (walletAddress) {
+      try {
+        const records = await getMedicalRecords()
+        setMedicalRecords(records)
+      } catch (error) {
+        console.error("Lỗi tải hồ sơ y tế:", error)
       }
     }
+  }, [walletAddress, getMedicalRecords]);
 
+  useEffect(() => {
     fetchRecords()
-  }, [walletAddress, getMedicalRecords])
+  }, [fetchRecords])
+
+  // Thêm hàm xử lý khi phê duyệt hồ sơ
+  const handleApproveRecord = async (record) => {
+    try {
+      await approveRecord(record.id);
+      // Gửi thông báo qua WebSocket
+      sendMessage({
+        type: 'RECORD_APPROVED',
+        recordId: record.id,
+        doctorAddress: record.doctorAddress
+      });
+      // Cập nhật lại danh sách hồ sơ
+      fetchRecords();
+      toast.success('Phê duyệt hồ sơ thành công');
+    } catch (error) {
+      console.error('Lỗi khi phê duyệt hồ sơ:', error);
+      toast.error('Không thể phê duyệt hồ sơ');
+    }
+  };
 
   const recordTypeToString = (type) => {
     switch (Number(type)) {
@@ -257,6 +290,17 @@ function PatientRecords() {
                                   Xem chi tiết
                                 </button>
                               </div>
+
+                              {/* Nút phê duyệt */}
+                              {!record.isApproved && (
+                                <button
+                                  onClick={() => handleApproveRecord(record)}
+                                  className="inline-flex items-center px-4 py-2 ml-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors duration-200"
+                                >
+                                  <span className="mr-2">✓</span>
+                                  Phê duyệt
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
