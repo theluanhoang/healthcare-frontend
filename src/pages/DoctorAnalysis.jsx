@@ -7,43 +7,70 @@ import {
   LinearScale,
   Title,
   Tooltip,
+  ArcElement,
 } from "chart.js";
-import { useState } from "react";
-import { Bar } from "react-chartjs-2";
+import { useCallback, useEffect, useState } from "react";
+import { Bar, Pie } from "react-chartjs-2";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import Sidebar from "../components/doctors/Sidebar";
+import { useSmartContract } from "../hooks";
+import useIpfs from "../hooks/useIPFS";
+import { toast } from "react-toastify";
 
-// Đăng ký các thành phần cần thiết cho Chart.js
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+// Đăng ký các thành phần cho Chart.js
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
-// Tạo schema với Zod cho lọc dữ liệu
+// Schema cho bộ lọc
 const filterSchema = z.object({
-  patient: z.string().optional(),
-  dateRange: z.string().optional(),
+  patientName: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  recordType: z.string().optional(),
 });
 
+// Enum cho loại bệnh án
+const RecordType = {
+  NONE: 0,
+  EXAMINATION_RECORD: 1,
+  TEST_RESULT: 2,
+  PRESCRIPTION: 3,
+};
+
+const getRecordTypeName = (type) => {
+  switch (Number(type)) {
+    case RecordType.EXAMINATION_RECORD:
+      return "Khám bệnh";
+    case RecordType.TEST_RESULT:
+      return "Kết quả xét nghiệm";
+    case RecordType.PRESCRIPTION:
+      return "Đơn thuốc";
+    default:
+      return "Không xác định";
+  }
+};
+
 function DoctorAnalysis() {
-  const [analysisData, setAnalysisData] = useState([
-    // Mock data, thay bằng API thực tế
-    {
-      id: 1,
-      patient: "Nguyễn Văn A",
-      diagnosis: "Cao huyết áp",
-      appointmentDate: "2025-05-10",
-      testResult: "Huyết áp: 140/90 mmHg",
-    },
-    {
-      id: 2,
-      patient: "Trần Thị B",
-      diagnosis: "Tiểu đường",
-      appointmentDate: "2025-05-08",
-      testResult: "Glucose: 180 mg/dL",
-    },
-  ]);
-
-  const [filteredData, setFilteredData] = useState(analysisData);
-
+  const { contract } = useSmartContract();
+  const { getJson, ipfs } = useIpfs();
+  
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({
+    allPatients: [],
+    medicalRecords: [],
+    recordDetails: {},
+    patientDetails: {},
+  });
+  const [filteredRecords, setFilteredRecords] = useState([]);
+  
   const {
     register,
     handleSubmit,
@@ -51,36 +78,189 @@ function DoctorAnalysis() {
   } = useForm({
     resolver: zodResolver(filterSchema),
     defaultValues: {
-      patient: "",
-      dateRange: "",
+      patientName: "",
+      dateFrom: "",
+      dateTo: "",
+      recordType: "",
     },
   });
 
-  const onFilter = (data) => {
-    const { patient, dateRange } = data;
-    let filtered = analysisData;
+  // Lấy thông tin bệnh nhân
+  const fetchPatientDetails = useCallback(async (address) => {
+    if (!contract || !address) return null;
+    try {
+      const patientData = await contract.getUser(address);
+      return {
+        address,
+        name: patientData[3],
+        phoneNumber: patientData[2],
+        email: patientData[4],
+        isActive: patientData[1],
+      };
+    } catch (error) {
+      console.error("Lỗi khi lấy thông tin bệnh nhân:", error);
+      return null;
+    }
+  }, [contract]);
 
-    if (patient) {
-      filtered = filtered.filter((item) =>
-        item.patient.toLowerCase().includes(patient.toLowerCase())
+  // Lấy dữ liệu từ IPFS
+  const fetchIPFSData = useCallback(async (ipfsHash) => {
+    if (!ipfsHash || !getJson || !ipfs) return null;
+    try {
+      const jsonData = await getJson(ipfsHash);
+      return JSON.parse(jsonData);
+    } catch (error) {
+      console.error("Lỗi khi lấy dữ liệu từ IPFS:", error);
+      return null;
+    }
+  }, [getJson, ipfs]);
+
+  // Khởi tạo dữ liệu
+  useEffect(() => {
+    const initializeData = async () => {
+      if (!contract || !ipfs) return;
+
+      try {
+        setLoading(true);
+        // Lấy danh sách tất cả bệnh nhân
+        const patientAddresses = await contract.getAllPatients();
+        
+        // Lấy thông tin chi tiết của từng bệnh nhân
+        const patientDetailsMap = {};
+        const patientsData = await Promise.all(
+          patientAddresses.map(async (address) => {
+            const details = await fetchPatientDetails(address);
+            if (details) {
+              patientDetailsMap[address] = details;
+              return details;
+            }
+            return null;
+          })
+        );
+
+        // Lấy bệnh án của tất cả bệnh nhân
+        const allRecords = [];
+        const recordDetailsMap = {};
+
+        await Promise.all(
+          patientAddresses.map(async (address) => {
+            const records = await contract.getMedicalRecords(address);
+            if (Array.isArray(records)) {
+              const formattedRecords = await Promise.all(
+                records.map(async (record, index) => {
+                  const ipfsData = await fetchIPFSData(record.ipfsHash);
+                  if (ipfsData) {
+                    recordDetailsMap[record.ipfsHash] = ipfsData;
+                  }
+                  return {
+                    id: `${address}-${index}`,
+                    patientAddress: address,
+                    ipfsHash: record.ipfsHash,
+                    doctor: record.doctor,
+                    timestamp: Number(record.timestamp),
+                    recordType: Number(record.recordType),
+                    isApproved: record.isApproved,
+                  };
+                })
+              );
+              allRecords.push(...formattedRecords);
+            }
+          })
+        );
+
+        setData({
+          allPatients: patientsData.filter(Boolean),
+          medicalRecords: allRecords,
+          recordDetails: recordDetailsMap,
+          patientDetails: patientDetailsMap,
+        });
+        setFilteredRecords(allRecords);
+      } catch (error) {
+        console.error("Lỗi khi khởi tạo dữ liệu:", error);
+        toast.error("Không thể tải dữ liệu. Vui lòng thử lại sau.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeData();
+  }, [contract, ipfs, fetchPatientDetails, fetchIPFSData]);
+
+  // Xử lý lọc dữ liệu
+  const onFilter = (filterData) => {
+    const { patientName, dateFrom, dateTo, recordType } = filterData;
+    let filtered = [...data.medicalRecords];
+
+    if (patientName) {
+      filtered = filtered.filter((record) => {
+        const patient = data.patientDetails[record.patientAddress];
+        return patient?.name.toLowerCase().includes(patientName.toLowerCase());
+      });
+    }
+
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom).getTime() / 1000;
+      filtered = filtered.filter((record) => record.timestamp >= fromDate);
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo).getTime() / 1000;
+      filtered = filtered.filter((record) => record.timestamp <= toDate);
+    }
+
+    if (recordType) {
+      filtered = filtered.filter(
+        (record) => record.recordType === parseInt(recordType)
       );
     }
 
-    if (dateRange) {
-      // Giả sử dateRange là một ngày cụ thể, có thể mở rộng để xử lý khoảng ngày
-      filtered = filtered.filter((item) => item.appointmentDate.includes(dateRange));
-    }
-
-    setFilteredData(filtered);
+    setFilteredRecords(filtered);
   };
 
-  // Dữ liệu cho biểu đồ (số lượng cuộc hẹn theo bệnh nhân)
-  const chartData = {
-    labels: analysisData.map((item) => item.patient),
+  // Dữ liệu cho biểu đồ số lượng bệnh án theo loại
+  const recordTypeChartData = {
+    labels: Object.values(RecordType)
+      .filter((type) => type !== RecordType.NONE)
+      .map(getRecordTypeName),
     datasets: [
       {
-        label: "Số lượng cuộc hẹn",
-        data: analysisData.map((_, index) => index + 2), // Mock data
+        label: "Số lượng bệnh án",
+        data: Object.values(RecordType)
+          .filter((type) => type !== RecordType.NONE)
+          .map(
+            (type) =>
+              filteredRecords.filter((record) => record.recordType === type).length
+          ),
+        backgroundColor: [
+          "rgba(99, 102, 241, 0.6)",
+          "rgba(52, 211, 153, 0.6)",
+          "rgba(251, 146, 60, 0.6)",
+        ],
+        borderColor: [
+          "rgba(99, 102, 241, 1)",
+          "rgba(52, 211, 153, 1)",
+          "rgba(251, 146, 60, 1)",
+        ],
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // Dữ liệu cho biểu đồ số lượng bệnh án theo thời gian
+  const timelineChartData = {
+    labels: filteredRecords
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .slice(-10)
+      .map((record) =>
+        new Date(record.timestamp * 1000).toLocaleDateString("vi-VN")
+      ),
+    datasets: [
+      {
+        label: "Số lượng bệnh án",
+        data: filteredRecords
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .slice(-10)
+          .map(() => 1),
         backgroundColor: "rgba(99, 102, 241, 0.6)",
         borderColor: "rgba(99, 102, 241, 1)",
         borderWidth: 1,
@@ -88,18 +268,13 @@ function DoctorAnalysis() {
     ],
   };
 
-  const chartOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: "top",
-      },
-      title: {
-        display: true,
-        text: "Tần suất cuộc hẹn theo bệnh nhân",
-      },
-    },
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50">
@@ -115,7 +290,7 @@ function DoctorAnalysis() {
             Phân tích dữ liệu
           </h1>
           <p className="text-lg md:text-xl text-gray-200">
-            Phân tích dữ liệu bệnh nhân để hỗ trợ chẩn đoán và điều trị hiệu quả.
+            Phân tích dữ liệu bệnh nhân để hỗ trợ chẩn đoán và điều trị hiệu quả
           </p>
         </div>
       </section>
@@ -136,35 +311,68 @@ function DoctorAnalysis() {
                 </h2>
                 <form
                   onSubmit={handleSubmit(onFilter)}
-                  className="flex flex-col sm:flex-row gap-4"
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
                 >
-                  <div className="flex-1">
+                  <div>
                     <input
                       type="text"
-                      {...register("patient")}
-                      placeholder="Tìm kiếm theo tên bệnh nhân"
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-sm"
+                      {...register("patientName")}
+                      placeholder="Tên bệnh nhân"
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
-                    {errors.patient && (
-                      <p className="text-red-500 text-sm mt-1">{errors.patient.message}</p>
+                    {errors.patientName && (
+                      <p className="text-red-500 text-sm mt-1">
+                        {errors.patientName.message}
+                      </p>
                     )}
                   </div>
-                  <div className="flex-1">
+
+                  <div>
                     <input
                       type="date"
-                      {...register("dateRange")}
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-sm"
+                      {...register("dateFrom")}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
-                    {errors.dateRange && (
-                      <p className="text-red-500 text-sm mt-1">{errors.dateRange.message}</p>
+                    {errors.dateFrom && (
+                      <p className="text-red-500 text-sm mt-1">
+                        {errors.dateFrom.message}
+                      </p>
                     )}
                   </div>
-                  <button
-                    type="submit"
-                    className="py-3 px-6 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
-                  >
-                    Lọc
-                  </button>
+
+                  <div>
+                    <input
+                      type="date"
+                      {...register("dateTo")}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    {errors.dateTo && (
+                      <p className="text-red-500 text-sm mt-1">
+                        {errors.dateTo.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <select
+                      {...register("recordType")}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                      <option value="">Tất cả loại bệnh án</option>
+                      <option value={RecordType.EXAMINATION_RECORD}>Khám bệnh</option>
+                      <option value={RecordType.TEST_RESULT}>Kết quả xét nghiệm</option>
+                      <option value={RecordType.PRESCRIPTION}>Đơn thuốc</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2 lg:col-span-4">
+                    <button
+                      type="submit"
+                      className="w-full py-3 px-6 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300"
+                    >
+                      Lọc dữ liệu
+                    </button>
+                  </div>
                 </form>
               </div>
 
@@ -174,52 +382,115 @@ function DoctorAnalysis() {
                   Tổng quan phân tích
                 </h2>
 
-                {/* Chart */}
-                <div className="mb-8">
-                  <Bar data={chartData} options={chartOptions} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  {/* Biểu đồ phân bố loại bệnh án */}
+                  <div className="bg-white p-6 rounded-xl shadow-md">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                      Phân bố loại bệnh án
+                    </h3>
+                    <Pie data={recordTypeChartData} />
+                  </div>
+
+                  {/* Biểu đồ số lượng bệnh án theo thời gian */}
+                  <div className="bg-white p-6 rounded-xl shadow-md">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                      Số lượng bệnh án theo thời gian
+                    </h3>
+                    <Bar
+                      data={timelineChartData}
+                      options={{
+                        responsive: true,
+                        scales: {
+                          y: {
+                            beginAtZero: true,
+                            ticks: {
+                              stepSize: 1,
+                            },
+                          },
+                        },
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Data Table */}
-                <h3 className="text-xl font-semibold text-gray-800 mb-4">
-                  Chi tiết dữ liệu bệnh nhân
-                </h3>
-                {filteredData.length === 0 ? (
-                  <p className="text-gray-600 text-center">Không có dữ liệu để hiển thị.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full table-auto">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                            Bệnh nhân
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                            Chẩn đoán
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                            Ngày khám
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                            Kết quả xét nghiệm
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredData.map((item) => (
-                          <tr
-                            key={item.id}
-                            className="border-b hover:bg-gray-50 transition-all duration-200"
-                          >
-                            <td className="px-4 py-3 text-gray-700">{item.patient}</td>
-                            <td className="px-4 py-3 text-gray-700">{item.diagnosis}</td>
-                            <td className="px-4 py-3 text-gray-700">{item.appointmentDate}</td>
-                            <td className="px-4 py-3 text-gray-700">{item.testResult}</td>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                    Chi tiết bệnh án ({filteredRecords.length})
+                  </h3>
+                  {filteredRecords.length === 0 ? (
+                    <p className="text-gray-600 text-center py-8">
+                      Không có dữ liệu để hiển thị.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full table-auto">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                              Bệnh nhân
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                              Loại bệnh án
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                              Ngày tạo
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                              Chẩn đoán
+                            </th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                              Trạng thái
+                            </th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        </thead>
+                        <tbody>
+                          {filteredRecords.map((record) => {
+                            const ipfsData = data.recordDetails[record.ipfsHash];
+                            const patient = data.patientDetails[record.patientAddress];
+                            return (
+                              <tr
+                                key={record.id}
+                                className="border-b hover:bg-gray-50 transition-all duration-200"
+                              >
+                                <td className="px-4 py-3 text-gray-700">
+                                  {patient?.name || "N/A"}
+                                </td>
+                                <td className="px-4 py-3 text-gray-700">
+                                  {getRecordTypeName(record.recordType)}
+                                </td>
+                                <td className="px-4 py-3 text-gray-700">
+                                  {new Date(record.timestamp * 1000).toLocaleDateString(
+                                    "vi-VN",
+                                    {
+                                      year: "numeric",
+                                      month: "long",
+                                      day: "numeric",
+                                    }
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-gray-700">
+                                  {ipfsData?.records?.[0]?.details?.diagnosis || "N/A"}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={`px-3 py-1 text-sm font-medium rounded-full ${
+                                      record.isApproved
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-yellow-100 text-yellow-800"
+                                    }`}
+                                  >
+                                    {record.isApproved ? "Đã xác nhận" : "Chờ xác nhận"}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

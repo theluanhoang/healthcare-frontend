@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useSmartContract } from "../hooks";
-import { useIpfs } from "../hooks";
+import useIpfs from "../hooks/useIPFS";
 import Sidebar from "../components/doctors/Sidebar";
 
 // Enum for record types
@@ -35,116 +35,149 @@ const shortenAddress = (address) => {
 const PatientDetail = () => {
   const { patientAddress } = useParams();
   const { contract } = useSmartContract();
-  const { getJson } = useIpfs();
-  const [patient, setPatient] = useState(null);
-  const [medicalRecords, setMedicalRecords] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [recordDetails, setRecordDetails] = useState({});
-  const [doctorNames, setDoctorNames] = useState({});
+  const { getJson, ipfs } = useIpfs();
+  
+  const [data, setData] = useState({
+    isLoading: true,
+    patient: null,
+    medicalRecords: [],
+    recordDetails: {},
+    doctorNames: {}
+  });
+
+  // Cache for IPFS data to prevent repeated fetches
+  const [fetchedIpfsHashes, setFetchedIpfsHashes] = useState(new Set());
 
   // Lấy tên bác sĩ từ địa chỉ ví
   const fetchDoctorName = useCallback(async (doctorAddress) => {
-    if (!contract || !doctorAddress) return;
+    if (!contract || !doctorAddress) return null;
     try {
       const doctorData = await contract.getUser(doctorAddress);
-      return doctorData[3] || shortenAddress(doctorAddress); // fullName là index 3
+      return doctorData[3] || shortenAddress(doctorAddress);
     } catch (error) {
       console.error("Lỗi khi lấy thông tin bác sĩ:", error);
       return shortenAddress(doctorAddress);
     }
   }, [contract]);
 
-  // Lấy dữ liệu từ IPFS
+  // Lấy dữ liệu từ IPFS với cache
   const fetchIPFSData = useCallback(async (ipfsHash) => {
-    if (!ipfsHash) return null;
+    if (!ipfsHash || !getJson || !ipfs) return null;
+    if (fetchedIpfsHashes.has(ipfsHash)) {
+      return data.recordDetails[ipfsHash];
+    }
+    
     try {
-      const data = await getJson(ipfsHash);
-      return JSON.parse(data);
+      const jsonData = await getJson(ipfsHash);
+      const parsedData = JSON.parse(jsonData);
+      setFetchedIpfsHashes(prev => new Set([...prev, ipfsHash]));
+      setData(prev => ({
+        ...prev,
+        recordDetails: {
+          ...prev.recordDetails,
+          [ipfsHash]: parsedData
+        }
+      }));
+      return parsedData;
     } catch (error) {
       console.error("Lỗi khi lấy dữ liệu từ IPFS:", error);
       return null;
     }
-  }, [getJson]);
+  }, [getJson, ipfs, fetchedIpfsHashes, data.recordDetails]);
 
-  // Lấy thông tin bệnh nhân và lịch sử khám bệnh
-  const fetchPatientData = useCallback(async () => {
-    if (!contract || !patientAddress) return;
+  // Khởi tạo dữ liệu
+  useEffect(() => {
+    let isMounted = true;
 
-    try {
-      setIsLoading(true);
+    const initializeData = async () => {
+      if (!contract || !patientAddress || !ipfs) return;
 
-      // Lấy thông tin bệnh nhân
-      const patientData = await contract.getUser(patientAddress);
-      console.log("Thông tin bệnh nhân:", patientData);
+      try {
+        // Lấy thông tin bệnh nhân
+        const patientData = await contract.getUser(patientAddress);
+        if (!patientData || !patientData[3]) {
+          if (isMounted) {
+            toast.error("Không tìm thấy thông tin bệnh nhân");
+            setData(prev => ({ ...prev, isLoading: false }));
+          }
+          return;
+        }
 
-      if (!patientData || !patientData[3]) {
-        toast.error("Không tìm thấy thông tin bệnh nhân");
-        return;
-      }
+        const patient = {
+          address: patientAddress,
+          name: patientData[3],
+          email: patientData[4] || "Chưa cập nhật",
+          phoneNumber: patientData[2] || "Chưa cập nhật",
+          role: Number(patientData[0]),
+          isActive: patientData[1]
+        };
 
-      // Chuyển đổi dữ liệu bệnh nhân
-      const patient = {
-        address: patientAddress,
-        name: patientData[3],
-        email: patientData[4] || "Chưa cập nhật",
-        phoneNumber: patientData[2] || "Chưa cập nhật",
-        role: Number(patientData[0]),
-        isActive: patientData[1]
-      };
+        // Lấy lịch sử khám bệnh
+        const records = await contract.getMedicalRecords(patientAddress);
+        const formattedRecords = Array.isArray(records) 
+          ? records
+              .map((record, index) => ({
+                id: index,
+                ipfsHash: record.ipfsHash,
+                doctor: record.doctor,
+                timestamp: Number(record.timestamp),
+                recordType: Number(record.recordType),
+                isApproved: record.isApproved
+              }))
+              .sort((a, b) => b.timestamp - a.timestamp)
+          : [];
 
-      setPatient(patient);
-
-      // Lấy lịch sử khám bệnh
-      const records = await contract.getMedicalRecords(patientAddress);
-      console.log("Lịch sử khám bệnh:", records);
-
-      if (Array.isArray(records)) {
-        // Chuyển đổi và sắp xếp theo thời gian mới nhất
-        const formattedRecords = records
-          .map((record, index) => ({
-            id: index,
-            ipfsHash: record.ipfsHash,
-            doctor: record.doctor,
-            timestamp: Number(record.timestamp),
-            recordType: Number(record.recordType),
-            isApproved: record.isApproved
-          }))
-          .sort((a, b) => b.timestamp - a.timestamp);
-
-        setMedicalRecords(formattedRecords);
-
-        // Lấy tên bác sĩ và dữ liệu IPFS cho mỗi record
+        // Lấy thông tin chi tiết cho mỗi record
         const doctorNamesMap = {};
-        const recordDetailsMap = {};
 
+        // First update the basic data
+        if (isMounted) {
+          setData(prev => ({
+            isLoading: false,
+            patient,
+            medicalRecords: formattedRecords,
+            recordDetails: prev.recordDetails,
+            doctorNames: doctorNamesMap
+          }));
+        }
+
+        // Then fetch IPFS data for each record
         await Promise.all(
           formattedRecords.map(async (record) => {
-            // Lấy tên bác sĩ
-            const doctorName = await fetchDoctorName(record.doctor);
-            doctorNamesMap[record.doctor] = doctorName;
-
-            // Lấy dữ liệu IPFS
-            const ipfsData = await fetchIPFSData(record.ipfsHash);
-            if (ipfsData) {
-              recordDetailsMap[record.ipfsHash] = ipfsData;
+            if (!doctorNamesMap[record.doctor]) {
+              const doctorName = await fetchDoctorName(record.doctor);
+              if (doctorName && isMounted) {
+                setData(prev => ({
+                  ...prev,
+                  doctorNames: {
+                    ...prev.doctorNames,
+                    [record.doctor]: doctorName
+                  }
+                }));
+              }
             }
+
+            await fetchIPFSData(record.ipfsHash);
           })
         );
 
-        setDoctorNames(doctorNamesMap);
-        setRecordDetails(recordDetailsMap);
+      } catch (error) {
+        console.error("Lỗi khi khởi tạo dữ liệu:", error);
+        if (isMounted) {
+          toast.error("Không thể lấy thông tin. Vui lòng thử lại sau.");
+          setData(prev => ({ ...prev, isLoading: false }));
+        }
       }
-    } catch (error) {
-      console.error("Lỗi khi lấy thông tin bệnh nhân:", error);
-      toast.error("Không thể lấy thông tin bệnh nhân. Vui lòng thử lại sau.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [contract, patientAddress, fetchDoctorName, fetchIPFSData]);
+    };
 
-  useEffect(() => {
-    fetchPatientData();
-  }, [fetchPatientData]);
+    initializeData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [contract, patientAddress, ipfs, fetchDoctorName, fetchIPFSData]);
+
+  const { isLoading, patient, medicalRecords, recordDetails, doctorNames } = data;
 
   if (isLoading) {
     return (
@@ -288,26 +321,59 @@ const PatientDetail = () => {
                           
                           {recordDetails[record.ipfsHash] && (
                             <div className="mt-4 space-y-4">
-                              {recordDetails[record.ipfsHash].diagnosis && (
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-2">Ngày khám</h4>
+                                <p className="text-gray-600">
+                                  {new Date(recordDetails[record.ipfsHash].visitDate).toLocaleDateString("vi-VN", {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric"
+                                  })}
+                                </p>
+                              </div>
+
+                              {recordDetails[record.ipfsHash].records?.[0]?.details?.symptoms && (
+                                <div>
+                                  <h4 className="font-medium text-gray-700 mb-2">Triệu chứng</h4>
+                                  <p className="text-gray-600">{recordDetails[record.ipfsHash].records[0].details.symptoms}</p>
+                                </div>
+                              )}
+
+                              {recordDetails[record.ipfsHash].records?.[0]?.details?.diagnosis && (
                                 <div>
                                   <h4 className="font-medium text-gray-700 mb-2">Chẩn đoán</h4>
-                                  <p className="text-gray-600">{recordDetails[record.ipfsHash].diagnosis}</p>
+                                  <p className="text-gray-600">{recordDetails[record.ipfsHash].records[0].details.diagnosis}</p>
                                 </div>
                               )}
-                              
-                              {recordDetails[record.ipfsHash].prescription && (
-                                <div>
-                                  <h4 className="font-medium text-gray-700 mb-2">Đơn thuốc</h4>
-                                  <p className="text-gray-600">{recordDetails[record.ipfsHash].prescription}</p>
-                                </div>
-                              )}
-                              
-                              {recordDetails[record.ipfsHash].notes && (
+
+                              {recordDetails[record.ipfsHash].records?.[0]?.details?.notes && (
                                 <div>
                                   <h4 className="font-medium text-gray-700 mb-2">Ghi chú</h4>
-                                  <p className="text-gray-600">{recordDetails[record.ipfsHash].notes}</p>
+                                  <p className="text-gray-600">{recordDetails[record.ipfsHash].records[0].details.notes}</p>
                                 </div>
                               )}
+
+                              <div className="pt-2 border-t border-gray-200">
+                                <h4 className="font-medium text-gray-700 mb-2">Thông tin thêm</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <span className="text-sm text-gray-500">Người tạo:</span>
+                                    <p className="text-gray-600">{shortenAddress(recordDetails[record.ipfsHash].createdBy)}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-sm text-gray-500">Thời gian tạo:</span>
+                                    <p className="text-gray-600">
+                                      {new Date(recordDetails[record.ipfsHash].createdAt).toLocaleString("vi-VN", {
+                                        year: "numeric",
+                                        month: "numeric",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit"
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
