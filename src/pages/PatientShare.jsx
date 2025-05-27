@@ -152,14 +152,16 @@ function PatientShare() {
 
   const onSubmitAccess = async (data) => {
     try {
-      await grantAccessToDoctor(data.doctorAddress)
-      resetAccess()
-      toast.success("Cấp quyền truy cập cho bác sĩ thành công!")
+      await grantAccessToDoctor(data.doctorAddress);
+      resetAccess();
+      const doctor = doctors.find(d => d.address === data.doctorAddress);
+      const doctorName = doctor ? doctor.fullName : data.doctorAddress;
+      toast.success(`Đã cấp quyền truy cập cho bác sĩ ${doctorName}. Bác sĩ có thể thêm hồ sơ y tế cho bạn.`);
     } catch (error) {
-      console.error("Lỗi cấp quyền truy cập:", error)
-      toast.error(error.message || "Không thể cấp quyền truy cập.")
+      console.error("Lỗi cấp quyền truy cập:", error);
+      toast.error(error.message || "Không thể cấp quyền truy cập.");
     }
-  }
+  };
 
   const approveRecord = async (recordIndex) => {
     try {

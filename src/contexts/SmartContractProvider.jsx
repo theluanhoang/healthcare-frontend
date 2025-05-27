@@ -269,75 +269,91 @@ export const SmartContractProvider = ({ children }) => {
   }, [contract]);
 
   const fetchPatients = useCallback(async () => {
-    if (!contract) {
-      console.warn("fetchPatients: Hợp đồng không khả dụng.");
+    if (!contract || !walletAddress) {
+      console.warn("fetchPatients: Hợp đồng hoặc địa chỉ ví không khả dụng.");
       return [];
     }
 
     try {
-      const userCount = await contract.getUserAddressesLength();
-      console.log("fetchPatients: Số lượng người dùng:", Number(userCount));
+      // Kiểm tra role của người dùng hiện tại
+      const currentUser = await getUser(walletAddress);
+      const isDoctor = currentUser.role === "2";
 
-      if (Number(userCount) === 0) {
-        console.log("fetchPatients: Không có người dùng trong hệ thống");
-        setPatients([]);
-        return [];
-      }
+      if (isDoctor) {
+        // Nếu là bác sĩ, chỉ lấy danh sách bệnh nhân đã cấp quyền
+        const [authorizedAddresses, authorizedNames] = await contract.getAuthorizedPatients(walletAddress);
+        
+        const formattedPatients = await Promise.all(
+          authorizedAddresses.map(async (addr, index) => {
+            try {
+              const user = await getUser(addr);
+              return {
+                address: addr,
+                fullName: authorizedNames[index] || "Chưa cập nhật",
+                email: user.email || "Chưa cập nhật",
+                isAuthorized: true
+              };
+            } catch (error) {
+              console.warn(`fetchPatients: Lỗi lấy thông tin bệnh nhân ${addr}:`, error.message);
+              return null;
+            }
+          })
+        );
 
-      const addresses = [];
-      for (let i = 0; i < Number(userCount); i++) {
-        try {
-          const addr = await contract.userAddresses(i);
-          if (
-            addr &&
-            typeof addr === "string" &&
-            addr !== "0x0000000000000000000000000000000000000000"
-          ) {
-            addresses.push(addr);
-          }
-        } catch (error) {
-          console.warn(`fetchPatients: Lỗi lấy địa chỉ tại index ${i}:`, error);
+        const validPatients = formattedPatients.filter(p => p !== null);
+        console.log("fetchPatients: Danh sách bệnh nhân đã cấp quyền:", validPatients);
+        setPatients(validPatients);
+        return validPatients;
+      } else {
+        // Nếu không phải bác sĩ, lấy toàn bộ danh sách bệnh nhân
+        const userCount = await contract.getUserAddressesLength();
+        console.log("fetchPatients: Số lượng người dùng:", Number(userCount));
+
+        if (Number(userCount) === 0) {
+          console.log("fetchPatients: Không có người dùng trong hệ thống");
+          setPatients([]);
+          return [];
         }
-      }
 
-      console.log("fetchPatients: Danh sách địa chỉ người dùng:", addresses);
-
-      if (addresses.length === 0) {
-        console.log("fetchPatients: Không có địa chỉ hợp lệ");
-        setPatients([]);
-        return [];
-      }
-
-      const formattedPatients = [];
-      for (const addr of addresses) {
-        try {
-          const user = await getUser(addr);
-          if (user && user.role === "1") {
-            formattedPatients.push({
-              address: addr,
-              fullName: user.fullName || "Chưa cập nhật",
-              email: user.email || "Chưa cập nhật",
-            });
+        const addresses = [];
+        for (let i = 0; i < Number(userCount); i++) {
+          try {
+            const addr = await contract.userAddresses(i);
+            if (addr && typeof addr === "string" && addr !== "0x0000000000000000000000000000000000000000") {
+              addresses.push(addr);
+            }
+          } catch (error) {
+            console.warn(`fetchPatients: Lỗi lấy địa chỉ tại index ${i}:`, error);
           }
-        } catch (error) {
-          console.warn(`fetchPatients: Lỗi lấy thông tin người dùng ${addr}:`, error.message);
         }
-      }
 
-      console.log("fetchPatients: Danh sách bệnh nhân đã format:", formattedPatients);
+        const formattedPatients = [];
+        for (const addr of addresses) {
+          try {
+            const user = await getUser(addr);
+            if (user && user.role === "1") {
+              formattedPatients.push({
+                address: addr,
+                fullName: user.fullName || "Chưa cập nhật",
+                email: user.email || "Chưa cập nhật",
+                isAuthorized: false
+              });
+            }
+          } catch (error) {
+            console.warn(`fetchPatients: Lỗi lấy thông tin người dùng ${addr}:`, error.message);
+          }
+        }
 
-      setPatients((prev) => {
-        if (JSON.stringify(prev) === JSON.stringify(formattedPatients)) return prev;
+        console.log("fetchPatients: Danh sách bệnh nhân:", formattedPatients);
+        setPatients(formattedPatients);
         return formattedPatients;
-      });
-
-      return formattedPatients;
+      }
     } catch (error) {
       console.error("fetchPatients: Lỗi lấy danh sách bệnh nhân:", JSON.stringify(error, null, 2));
       toast.error(`Không thể lấy danh sách bệnh nhân: ${error.reason || error.message}`);
       return [];
     }
-  }, [contract, getUser]);
+  }, [contract, walletAddress, getUser]);
 
   const getMedicalRecordsByDoctor = useCallback(
     async (doctorAddress = walletAddress) => {

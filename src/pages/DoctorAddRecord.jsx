@@ -438,19 +438,26 @@ function DoctorAddRecord() {
                     >
                       <option value="">Chọn bệnh nhân</option>
                       {patientsList.length > 0 ? (
-                        patientsList.map((patient) => (
-                          <option key={patient.address} value={patient.address}>
-                            {patient.fullName} ({patient.address.slice(0, 6)}...{patient.address.slice(-4)})
-                          </option>
-                        ))
+                        patientsList
+                          .filter(patient => patient.isAuthorized)
+                          .map((patient) => (
+                            <option key={patient.address} value={patient.address}>
+                              {patient.fullName} ({patient.address.slice(0, 6)}...{patient.address.slice(-4)})
+                            </option>
+                          ))
                       ) : (
                         <option value="" disabled>
-                          Không có bệnh nhân
+                          Không có bệnh nhân đã cấp quyền
                         </option>
                       )}
                     </select>
                     {errors.patient && (
                       <p className="text-red-500 text-sm mt-1">{errors.patient.message}</p>
+                    )}
+                    {patientsList.length > 0 && patientsList.filter(p => p.isAuthorized).length === 0 && (
+                      <p className="text-yellow-600 text-sm mt-2">
+                        ⚠️ Chưa có bệnh nhân nào cấp quyền cho bạn. Bệnh nhân cần cấp quyền trước khi bạn có thể thêm hồ sơ.
+                      </p>
                     )}
                   </div>
 
