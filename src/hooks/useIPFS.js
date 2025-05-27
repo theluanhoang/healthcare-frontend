@@ -95,7 +95,59 @@ const useIpfs = () => {
     }
   };
 
-  return { ipfs, uploadFile, uploadJson, getJson };
+  // Get binary file from IPFS and return as Blob URL
+  const getBinaryFile = async (cid) => {
+    if (!ipfs) throw new Error("IPFS client chưa được khởi tạo.");
+    if (!cid) throw new Error("CID không được để trống.");
+
+    try {
+      console.log("Fetching binary file from IPFS, CID:", cid);
+      
+      // Lấy dữ liệu từ IPFS dưới dạng Uint8Array
+      let data = new Uint8Array(0);
+      for await (const chunk of ipfs.cat(cid)) {
+        const newData = new Uint8Array(data.length + chunk.length);
+        newData.set(data);
+        newData.set(chunk, data.length);
+        data = newData;
+      }
+
+      // Kiểm tra xem có dữ liệu không
+      if (data.length === 0) {
+        throw new Error("Không có dữ liệu từ IPFS");
+      }
+
+      console.log("Received data length:", data.length);
+
+      // Thử đoán MIME type từ vài bytes đầu tiên
+      let mimeType = 'image/jpeg'; // default
+      const signature = data.slice(0, 4);
+      const header = Array.from(signature).map(byte => byte.toString(16).padStart(2, '0')).join('');
+      
+      // Kiểm tra signature của file
+      if (header.startsWith('89504e47')) {
+        mimeType = 'image/png';
+      } else if (header.startsWith('ffd8')) {
+        mimeType = 'image/jpeg';
+      } else if (header.startsWith('47494638')) {
+        mimeType = 'image/gif';
+      }
+
+      console.log("Detected MIME type:", mimeType);
+
+      // Tạo blob với MIME type phù hợp
+      const blob = new Blob([data], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      
+      console.log("Binary file fetched from IPFS and converted to URL:", url);
+      return url;
+    } catch (error) {
+      console.error("Lỗi khi lấy file từ IPFS:", error);
+      throw error;
+    }
+  };
+
+  return { ipfs, uploadFile, uploadJson, getJson, getBinaryFile };
 };
 
 export default useIpfs;

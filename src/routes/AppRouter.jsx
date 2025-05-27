@@ -17,6 +17,7 @@ import PatientProfile from "../pages/PatientProfile"
 import PatientRecords from "../pages/PatientRecords"
 import PatientShare from "../pages/PatientShare"
 import Register from "../pages/Register"
+import PatientDetail from "../pages/PatientDetail"
 
 function AppRoutes() {
   return (
@@ -39,6 +40,7 @@ function AppRoutes() {
       <Route path="/doctor/schedule" element={<DoctorSchedule />} />
       <Route path="/doctor/analysis" element={<DoctorAnalysis />} />
       <Route path="/doctor/verify" element={<DoctorVerify />} />
+      <Route path="/doctor/patient/:patientAddress" element={<PatientDetail />} />
     </Routes>
   )
 }

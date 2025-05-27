@@ -1,9 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import { z } from "zod";
 import Sidebar from "../components/doctors/Sidebar";
+import { useSmartContract } from "../hooks";
+import { toast } from "react-toastify";
 
 // Tạo schema với Zod cho tìm kiếm
 const searchSchema = z.object({
@@ -11,32 +13,10 @@ const searchSchema = z.object({
 });
 
 function DoctorPatients() {
-  const [patients, setPatients] = useState([
-    // Mock data, thay bằng API thực tế
-    {
-      id: 1,
-      name: "Nguyễn Văn A",
-      email: "nguyenvana@example.com",
-      walletAddress: "0x1234...5678",
-      lastVisit: "2025-05-10",
-    },
-    {
-      id: 2,
-      name: "Trần Thị B",
-      email: "tranthib@example.com",
-      walletAddress: "0x8765...4321",
-      lastVisit: "2025-05-08",
-    },
-    {
-      id: 3,
-      name: "Lê Văn C",
-      email: "levanc@example.com",
-      walletAddress: "0x9876...1234",
-      lastVisit: "2025-05-05",
-    },
-  ]);
-
-  const [filteredPatients, setFilteredPatients] = useState(patients);
+  const { contract, walletAddress } = useSmartContract();
+  const [patients, setPatients] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filteredPatients, setFilteredPatients] = useState([]);
 
   const {
     register,
@@ -49,8 +29,148 @@ function DoctorPatients() {
     },
   });
 
+  // Lấy danh sách bệnh nhân từ smart contract
+  const fetchPatients = useCallback(async () => {
+    if (!contract || !walletAddress) return;
+
+    try {
+      setIsLoading(true);
+      
+      // Lấy danh sách bệnh nhân được cấp quyền cho bác sĩ
+      const rawAuthorizedPatients = await contract.getAuthorizedPatients(walletAddress);
+      console.log("Dữ liệu thô từ getAuthorizedPatients:", rawAuthorizedPatients);
+
+      // Kiểm tra và chuyển đổi dữ liệu
+      let authorizedAddresses = [];
+      
+      // Kiểm tra nếu rawAuthorizedPatients là một mảng
+      if (Array.isArray(rawAuthorizedPatients)) {
+        authorizedAddresses = rawAuthorizedPatients;
+      } 
+      // Kiểm tra nếu rawAuthorizedPatients là một object với thuộc tính là mảng
+      else if (typeof rawAuthorizedPatients === 'object' && rawAuthorizedPatients !== null) {
+        // Thử lấy mảng từ các thuộc tính phổ biến
+        const possibleArrays = ['patients', 'addresses', '_value', 'value', 'items'];
+        for (const key of possibleArrays) {
+          if (Array.isArray(rawAuthorizedPatients[key])) {
+            authorizedAddresses = rawAuthorizedPatients[key];
+            break;
+          }
+        }
+      }
+
+      console.log("Mảng địa chỉ trước khi xử lý:", authorizedAddresses);
+
+      // Xử lý từng địa chỉ trong mảng
+      authorizedAddresses = authorizedAddresses
+        .map(item => {
+          // Nếu item là string
+          if (typeof item === 'string') {
+            return item;
+          }
+          // Nếu item là object
+          if (typeof item === 'object' && item !== null) {
+            // Thử các trường có thể chứa địa chỉ
+            const possibleFields = ['address', 'patientAddress', 'walletAddress', 'id'];
+            for (const field of possibleFields) {
+              if (typeof item[field] === 'string') {
+                return item[field];
+              }
+            }
+            // Nếu item có thuộc tính toString()
+            if (typeof item.toString === 'function') {
+              const str = item.toString();
+              if (str.startsWith('0x')) {
+                return str;
+              }
+            }
+          }
+          return null;
+        })
+        .filter(address => {
+          const isValid = address !== null && typeof address === 'string';
+          if (!isValid) {
+            console.log("Địa chỉ không hợp lệ:", address);
+          }
+          return isValid;
+        });
+
+      console.log("Danh sách địa chỉ bệnh nhân đã xử lý:", authorizedAddresses);
+
+      if (authorizedAddresses.length === 0) {
+        console.log("Không có bệnh nhân nào được cấp quyền");
+        setPatients([]);
+        setFilteredPatients([]);
+        return;
+      }
+
+      // Lấy thông tin chi tiết của từng bệnh nhân được cấp quyền
+      const patientsData = await Promise.all(
+        authorizedAddresses.map(async (address) => {
+          try {
+            console.log("Đang lấy thông tin cho địa chỉ:", address);
+            const patient = await contract.getUser(address);
+            console.log("Thông tin bệnh nhân:", patient);
+            
+            // Kiểm tra dữ liệu bệnh nhân
+            if (!patient || !patient[3]) { // Kiểm tra fullName ở index 3
+              console.log("Không tìm thấy thông tin bệnh nhân cho địa chỉ:", address);
+              return null;
+            }
+
+            // Lấy số lần khám
+            let visitCount;
+            try {
+              const medicalRecords = await contract.getMedicalRecords(address);
+              visitCount = Array.isArray(medicalRecords) ? medicalRecords.length : 0;
+              console.log("Số lần khám:", visitCount);
+            } catch (error) {
+              console.log("Lỗi khi lấy số lần khám:", error);
+              visitCount = 0;
+            }
+            
+            // Map dữ liệu từ mảng sang object
+            return {
+              id: address,
+              name: patient[3], // fullName ở index 3
+              email: patient[4] || "Chưa cập nhật", // email ở index 4
+              walletAddress: address,
+              visitCount: visitCount,
+              role: Number(patient[0]), // role ở index 0
+              isActive: patient[1], // isActive ở index 1
+              phoneNumber: patient[2] || "Chưa cập nhật" // phoneNumber ở index 2
+            };
+          } catch (error) {
+            console.error("Lỗi khi lấy thông tin bệnh nhân:", error);
+            console.log("Địa chỉ gây lỗi:", address);
+            return null;
+          }
+        })
+      );
+
+      // Lọc bỏ các giá trị null và sắp xếp theo số lần khám
+      const validPatients = patientsData
+        .filter(patient => patient !== null)
+        .sort((a, b) => b.visitCount - a.visitCount);
+
+      console.log("Danh sách bệnh nhân hợp lệ cuối cùng:", validPatients);
+      
+      setPatients(validPatients);
+      setFilteredPatients(validPatients);
+    } catch (error) {
+      console.error("Lỗi khi lấy danh sách bệnh nhân:", error);
+      toast.error("Không thể lấy danh sách bệnh nhân. Vui lòng thử lại sau.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contract, walletAddress]);
+
+  useEffect(() => {
+    fetchPatients();
+  }, [fetchPatients]);
+
   const onSearch = (data) => {
-    const query = data.searchQuery.toLowerCase();
+    const query = data.searchQuery?.toLowerCase() || "";
     if (!query) {
       setFilteredPatients(patients);
     } else {
@@ -58,7 +178,8 @@ function DoctorPatients() {
         patients.filter(
           (patient) =>
             patient.name.toLowerCase().includes(query) ||
-            patient.email.toLowerCase().includes(query)
+            patient.email.toLowerCase().includes(query) ||
+            patient.walletAddress.toLowerCase().includes(query)
         )
       );
     }
@@ -78,7 +199,7 @@ function DoctorPatients() {
             Quản lý bệnh nhân
           </h1>
           <p className="text-lg md:text-xl text-gray-200">
-            Xem và quản lý thông tin bệnh nhân của bạn một cách an toàn với công nghệ blockchain.
+            Xem và quản lý thông tin bệnh nhân đã cấp quyền cho bạn
           </p>
         </div>
       </section>
@@ -88,87 +209,125 @@ function DoctorPatients() {
         <div className="container mx-auto px-6">
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Sidebar Navigation */}
-             <Sidebar />
+            <Sidebar />
 
             {/* Patients Content */}
-            <div className="lg:w-3/4 bg-white rounded-xl shadow-lg p-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                Danh sách bệnh nhân
-              </h2>
+            <div className="lg:w-3/4 space-y-8">
+              {/* Search and Stats Card */}
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">
+                      Danh sách bệnh nhân
+                    </h2>
+                    <p className="text-gray-600 mt-1">
+                      Tổng số: {filteredPatients.length} bệnh nhân
+                    </p>
+                  </div>
+                  
+                  {/* Search Form */}
+                  <form
+                    onSubmit={handleSubmit(onSearch)}
+                    className="flex flex-col sm:flex-row gap-4"
+                  >
+                    <input
+                      type="text"
+                      {...register("searchQuery")}
+                      placeholder="Tìm kiếm theo tên, email, số điện thoại..."
+                      className="flex-1 min-w-[300px] p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                    />
+                    <button
+                      type="submit"
+                      className="py-3 px-6 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
+                    >
+                      Tìm kiếm
+                    </button>
+                  </form>
+                </div>
 
-              {/* Search Form */}
-              <form
-                onSubmit={handleSubmit(onSearch)}
-                className="mb-8 flex flex-col sm:flex-row gap-4"
-              >
-                <input
-                  type="text"
-                  {...register("searchQuery")}
-                  placeholder="Tìm kiếm theo tên hoặc email"
-                  className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-sm"
-                />
-                <button
-                  type="submit"
-                  className="py-3 px-6 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
-                >
-                  Tìm kiếm
-                </button>
-              </form>
-              {errors.searchQuery && (
-                <p className="text-red-500 text-sm mb-4">{errors.searchQuery.message}</p>
-              )}
+                {errors.searchQuery && (
+                  <p className="text-red-500 text-sm mb-4">{errors.searchQuery.message}</p>
+                )}
 
-              {/* Patients Table */}
-              {filteredPatients.length === 0 ? (
-                <p className="text-gray-600 text-center">Không tìm thấy bệnh nhân.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full table-auto">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                          Tên
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                          Email
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                          Địa chỉ ví
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                          Lần khám cuối
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                          Hành động
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPatients.map((patient) => (
-                        <tr
-                          key={patient.id}
-                          className="border-b hover:bg-gray-50 transition-all duration-200"
-                        >
-                          <td className="px-4 py-3 text-gray-700">{patient.name}</td>
-                          <td className="px-4 py-3 text-gray-700">{patient.email}</td>
-                          <td className="px-4 py-3 text-gray-700 font-mono text-sm">
-                            {patient.walletAddress}
-                          </td>
-                          <td className="px-4 py-3 text-gray-700">{patient.lastVisit}</td>
-                          <td className="px-4 py-3">
+                {/* Loading State */}
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : filteredPatients.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-600">Không tìm thấy bệnh nhân nào.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {filteredPatients.map((patient) => (
+                      <div
+                        key={patient.id}
+                        className="bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group"
+                      >
+                        <div className="p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-gray-800">{patient.name}</h3>
+                                <p className="text-sm text-gray-500">
+                                  {patient.role === 1 ? "Bệnh nhân" : patient.role === 2 ? "Bác sĩ" : "Không xác định"}
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                              patient.isActive
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}>
+                              {patient.isActive ? "Đang hoạt động" : "Không hoạt động"}
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-2 mb-4">
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium">Email:</span> {patient.email}
+                            </p>
+                            {patient.phoneNumber && patient.phoneNumber !== "" && (
+                              <p className="text-sm text-gray-600">
+                                <span className="font-medium">Số điện thoại:</span> {patient.phoneNumber}
+                              </p>
+                            )}
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium">Số lần khám:</span> {patient.visitCount}
+                            </p>
+                            <p className="text-sm text-gray-600 font-mono truncate">
+                              <span className="font-medium not-mono">Địa chỉ ví:</span> {patient.walletAddress}
+                            </p>
+                          </div>
+
+                          <div className="pt-4 border-t border-gray-100">
                             <Link
-                              to={`/doctor/patient/${patient.id}`}
-                              className="text-indigo-600 hover:text-indigo-800 font-medium"
+                              to={`/doctor/patient/${patient.walletAddress}`}
+                              className="inline-flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors duration-200"
                             >
                               Xem chi tiết
+                              <svg className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                              </svg>
                             </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
