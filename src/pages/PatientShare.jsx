@@ -163,12 +163,28 @@ function PatientShare() {
 
   const approveRecord = async (recordIndex) => {
     try {
-      await approveMedicalRecord(recordIndex)
+      // Lấy danh sách tất cả hồ sơ y tế để tìm index thực tế
+      const allRecords = await getMedicalRecords();
+      const pendingRecord = pendingRecords[recordIndex];
+      
+      // Tìm index thực tế trong danh sách tất cả hồ sơ
+      const actualIndex = allRecords.findIndex(
+        (record) => 
+          record.ipfsHash === pendingRecord.ipfsHash && 
+          record.doctor === pendingRecord.doctor &&
+          record.timestamp === pendingRecord.timestamp
+      );
+
+      if (actualIndex === -1) {
+        throw new Error("Không tìm thấy hồ sơ y tế");
+      }
+
+      await approveMedicalRecord(actualIndex);
     } catch (error) {
-      console.error("Lỗi phê duyệt hồ sơ:", error)
-      toast.error(error.message || "Không thể phê duyệt hồ sơ y tế.")
+      console.error("Lỗi phê duyệt hồ sơ:", error);
+      toast.error(error.message || "Không thể phê duyệt hồ sơ y tế.");
     }
-  }
+  };
 
   const recordTypeToString = (type) => {
     switch (Number(type)) {

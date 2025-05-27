@@ -99,8 +99,8 @@ class BlockchainEventHandler {
     const eventData = this.processedEvents.get(eventId)
 
     if (eventData) {
-      // Nếu event chưa quá 60 giây thì coi như đã processed
-      if (now - eventData.timestamp < 60000) {
+      // Tăng thời gian cache lên 5 phút thay vì 60 giây
+      if (now - eventData.timestamp < 300000) {
         console.log(`🚫 Event already processed: ${eventId}`)
         return true
       } else {
@@ -123,8 +123,8 @@ class BlockchainEventHandler {
   // Show toast với logic chặt chẽ hơn
   showUniqueToast(message, type, eventId) {
     // Kiểm tra toast đã active chưa
-    if (this.activeToasts.has(eventId)) {
-      console.log(`🚫 Toast already active: ${eventId}`)
+    if (this.activeToasts.has(eventId) || this.isEventProcessed(eventId)) {
+      console.log(`🚫 Toast already active or event processed: ${eventId}`)
       return
     }
 
@@ -137,6 +137,7 @@ class BlockchainEventHandler {
       }
 
       this.activeToasts.add(eventId)
+      this.markEventProcessed(eventId)
 
       const toastOptions = {
         toastId: eventId,
@@ -271,8 +272,20 @@ class BlockchainEventHandler {
     console.log("✅ MedicalRecordApproved:", { recordIndex, patient, eventId })
 
     try {
+      // Refresh medical records after approval
+      if (this.callbacks.fetchMedicalRecords) {
+        await this.callbacks.fetchMedicalRecords()
+      }
+
+      // Show notifications
       if (patient.toLowerCase() === this.walletAddress.toLowerCase()) {
         this.showUniqueToast("Hồ sơ y tế đã được phê duyệt!", "success", eventId)
+      }
+
+      // Notify doctor if they are the current user
+      const record = await this.contract.medicalRecords(recordIndex)
+      if (record && record.doctor.toLowerCase() === this.walletAddress.toLowerCase()) {
+        this.showUniqueToast("Bệnh nhân đã phê duyệt hồ sơ y tế!", "success", eventId)
       }
     } catch (error) {
       console.error("❌ Error handling MedicalRecordApproved:", error)

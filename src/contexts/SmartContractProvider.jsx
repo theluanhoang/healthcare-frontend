@@ -8,7 +8,7 @@ import { eventHandler } from "../utils/EventHandler";
 
 export const SmartContractContext = createContext();
 
-const contractAddress = "0x5B456C8f63A17f0908775C6115B0144A8D01B182";
+const contractAddress = "0x46633a3ACFf46Be8CD553677De3B606abdE28892";
 
 export const SmartContractProvider = ({ children }) => {
   const [signer, setSigner] = useState(null);
