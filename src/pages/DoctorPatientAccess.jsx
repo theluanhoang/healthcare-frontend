@@ -372,7 +372,7 @@ function DoctorPatientAccess() {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-700">Bệnh nhân</p>
-                            <p className="text-base text-gray-900">{selectedRecord.patientName}</p>
+                            <p className="text-base text-gray-900">{selectedRecord.patientName || selectedPatient?.fullName}</p>
                           </div>
                         </div>
                       </div>
