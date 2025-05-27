@@ -22,6 +22,7 @@ function DoctorPatientAccess() {
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [recordDetails, setRecordDetails] = useState(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const [selectedTab, setSelectedTab] = useState("EXAMINATION_RECORD")
 
   useEffect(() => {
     const fetchData = async () => {
@@ -353,7 +354,7 @@ function DoctorPatientAccess() {
                   <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                     <div className="p-6 border-b border-gray-200">
                       <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-gray-800">Chi tiết hồ sơ y tế</h2>
+                        <h2 className="text-2xl font-bold text-gray-900">Chi tiết hồ sơ y tế</h2>
                         <button onClick={closeRecordModal} className="text-gray-500 hover:text-gray-700 text-2xl">
                           ×
                         </button>
@@ -362,90 +363,111 @@ function DoctorPatientAccess() {
 
                     <div className="p-6">
                       {/* Thông tin chung */}
-                      <div className="mb-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Thông tin chung</h3>
+                      <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Thông tin chung</h3>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <p className="text-sm text-gray-500">Ngày khám</p>
-                            <p className="text-gray-700">{recordDetails.visitDate}</p>
+                            <p className="text-sm font-medium text-gray-700">Ngày khám</p>
+                            <p className="text-base text-gray-900">{recordDetails.visitDate}</p>
                           </div>
                           <div>
-                            <p className="text-sm text-gray-500">Bệnh nhân</p>
-                            <p className="text-gray-700">{selectedRecord.patientName}</p>
+                            <p className="text-sm font-medium text-gray-700">Bệnh nhân</p>
+                            <p className="text-base text-gray-900">{selectedRecord.patientName}</p>
                           </div>
                         </div>
                       </div>
 
-                      {/* Hiển thị từng loại record */}
-                      {recordDetails.records.map((record, index) => (
-                        <div key={index} className="mb-6 p-4 bg-gray-50 rounded-lg">
-                          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                            {record.recordType === "EXAMINATION_RECORD" && "Hồ sơ khám bệnh"}
-                            {record.recordType === "TEST_RESULT" && "Kết quả xét nghiệm"}
-                            {record.recordType === "PRESCRIPTION" && "Đơn thuốc"}
-                          </h3>
-
-                          {record.recordType === "EXAMINATION_RECORD" && (
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-sm text-gray-500">Triệu chứng</p>
-                                <p className="text-gray-700 whitespace-pre-line">{record.details.symptoms}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-500">Chẩn đoán</p>
-                                <p className="text-gray-700 whitespace-pre-line">{record.details.diagnosis}</p>
-                              </div>
-                              {record.details.notes && (
-                                <div>
-                                  <p className="text-sm text-gray-500">Ghi chú</p>
-                                  <p className="text-gray-700 whitespace-pre-line">{record.details.notes}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {record.recordType === "TEST_RESULT" && (
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-sm text-gray-500">Loại xét nghiệm</p>
-                                <p className="text-gray-700">{record.details.testType}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm text-gray-500">Kết quả</p>
-                                <p className="text-gray-700 whitespace-pre-line">{record.details.results}</p>
-                              </div>
-                              {record.details.comments && (
-                                <div>
-                                  <p className="text-sm text-gray-500">Nhận xét</p>
-                                  <p className="text-gray-700 whitespace-pre-line">{record.details.comments}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {record.recordType === "PRESCRIPTION" && (
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-sm text-gray-500 mb-2">Danh sách thuốc</p>
-                                <div className="space-y-3">
-                                  {record.details.medications.map((med, idx) => (
-                                    <div key={idx} className="p-3 bg-white rounded-lg border border-gray-200">
-                                      <p className="font-medium text-gray-800">{med.name}</p>
-                                      <p className="text-sm text-gray-600">Liều lượng: {med.dosage}</p>
-                                      <p className="text-sm text-gray-600">Hướng dẫn: {med.instructions}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                              {record.details.notes && (
-                                <div>
-                                  <p className="text-sm text-gray-500">Ghi chú</p>
-                                  <p className="text-gray-700 whitespace-pre-line">{record.details.notes}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                      {/* Tabs */}
+                      <div className="mb-6">
+                        <div className="flex space-x-4 border-b border-gray-200">
+                          {recordDetails.records.map((record) => (
+                            <button
+                              key={record.recordType}
+                              onClick={() => setSelectedTab(record.recordType)}
+                              className={`py-2 px-4 text-sm font-medium rounded-t-lg transition-colors duration-200 ${
+                                selectedTab === record.recordType
+                                  ? "text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50"
+                                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              {record.recordType === "EXAMINATION_RECORD" && "Khám bệnh"}
+                              {record.recordType === "TEST_RESULT" && "Xét nghiệm"}
+                              {record.recordType === "PRESCRIPTION" && "Đơn thuốc"}
+                            </button>
+                          ))}
                         </div>
+                      </div>
+
+                      {/* Nội dung tab */}
+                      {recordDetails.records.map((record) => (
+                        record.recordType === selectedTab && (
+                          <div key={record.recordType} className="bg-white rounded-lg">
+                            {record.recordType === "EXAMINATION_RECORD" && (
+                              <div className="space-y-6">
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                  <p className="text-sm font-semibold text-gray-900 mb-2">Triệu chứng</p>
+                                  <p className="text-base text-gray-800 whitespace-pre-line">{record.details.symptoms}</p>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg">
+                                  <p className="text-sm font-semibold text-gray-900 mb-2">Chẩn đoán</p>
+                                  <p className="text-base text-gray-800 whitespace-pre-line">{record.details.diagnosis}</p>
+                                </div>
+                                {record.details.notes && (
+                                  <div className="bg-yellow-50 p-4 rounded-lg">
+                                    <p className="text-sm font-semibold text-gray-900 mb-2">Ghi chú</p>
+                                    <p className="text-base text-gray-800 whitespace-pre-line">{record.details.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {record.recordType === "TEST_RESULT" && (
+                              <div className="space-y-6">
+                                <div className="bg-purple-50 p-4 rounded-lg">
+                                  <p className="text-sm font-semibold text-gray-900 mb-2">Loại xét nghiệm</p>
+                                  <p className="text-base text-gray-800">{record.details.testType}</p>
+                                </div>
+                                <div className="bg-indigo-50 p-4 rounded-lg">
+                                  <p className="text-sm font-semibold text-gray-900 mb-2">Kết quả</p>
+                                  <p className="text-base text-gray-800 whitespace-pre-line">{record.details.results}</p>
+                                </div>
+                                {record.details.comments && (
+                                  <div className="bg-pink-50 p-4 rounded-lg">
+                                    <p className="text-sm font-semibold text-gray-900 mb-2">Nhận xét</p>
+                                    <p className="text-base text-gray-800 whitespace-pre-line">{record.details.comments}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {record.recordType === "PRESCRIPTION" && (
+                              <div className="space-y-6">
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-900 mb-4">Danh sách thuốc</p>
+                                  <div className="space-y-4">
+                                    {record.details.medications.map((med, idx) => (
+                                      <div key={idx} className="p-4 bg-orange-50 rounded-lg border border-orange-100">
+                                        <p className="font-medium text-gray-900 mb-2">{med.name}</p>
+                                        <p className="text-sm text-gray-800">
+                                          <span className="font-medium">Liều lượng:</span> {med.dosage}
+                                        </p>
+                                        <p className="text-sm text-gray-800">
+                                          <span className="font-medium">Hướng dẫn:</span> {med.instructions}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                {record.details.notes && (
+                                  <div className="bg-red-50 p-4 rounded-lg">
+                                    <p className="text-sm font-semibold text-gray-900 mb-2">Ghi chú</p>
+                                    <p className="text-base text-gray-800 whitespace-pre-line">{record.details.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
                       ))}
                     </div>
                   </div>
