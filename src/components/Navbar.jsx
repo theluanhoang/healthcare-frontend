@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useAuth } from "../hooks";
 import { useToken } from "../contexts/TokenProvider";
+import { useSmartContract } from "../hooks";
 import { 
   CurrencyDollarIcon, 
   ArrowsRightLeftIcon, 
@@ -76,6 +77,16 @@ export const menuItems = {
       ]
     }
   ],
+  admin: [
+    {
+      label: "Admin",
+      icon: <ChartBarIcon className="h-5 w-5" />,
+      items: [
+        { path: "/admin/surveys", label: "Khảo sát", icon: <ClipboardDocumentListIcon className="h-5 w-5" /> },
+        { path: "/admin/fund", label: "Nạp ETH", icon: <CurrencyDollarIcon className="h-5 w-5" /> },
+      ]
+    }
+  ]
 };
 
 function NavbarDropdown({ group, isMobile, onItemClick }) {
@@ -85,10 +96,10 @@ function NavbarDropdown({ group, isMobile, onItemClick }) {
         <>
           <Popover.Button
             className={classNames(
-              'group inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200',
+              'group inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
               open 
-                ? 'text-indigo-600 bg-indigo-50 ring-2 ring-indigo-200 shadow-sm' 
-                : 'text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 hover:ring-2 hover:ring-indigo-100',
+                ? 'text-indigo-600 bg-indigo-50' 
+                : 'text-gray-700 hover:text-indigo-600 hover:bg-indigo-50',
               isMobile ? 'w-full justify-between' : ''
             )}
           >
@@ -103,7 +114,7 @@ function NavbarDropdown({ group, isMobile, onItemClick }) {
             </span>
             <ChevronDownIcon
               className={classNames(
-                'ml-2 h-4 w-4 transition-transform duration-200 text-gray-400 group-hover:text-indigo-500',
+                'ml-2 h-4 w-4 transition-colors duration-200 text-gray-400 group-hover:text-indigo-500',
                 open ? 'transform rotate-180 text-indigo-500' : ''
               )}
             />
@@ -112,38 +123,35 @@ function NavbarDropdown({ group, isMobile, onItemClick }) {
           <Transition
             as={Fragment}
             enter="transition ease-out duration-200"
-            enterFrom="opacity-0 translate-y-2"
+            enterFrom="opacity-0 translate-y-1"
             enterTo="opacity-100 translate-y-0"
             leave="transition ease-in duration-150"
             leaveFrom="opacity-100 translate-y-0"
-            leaveTo="opacity-0 translate-y-2"
+            leaveTo="opacity-0 translate-y-1"
           >
             <Popover.Panel 
               className={classNames(
-                'absolute z-10 mt-2 transform px-2 w-screen max-w-[260px] sm:px-0',
+                'absolute z-10 mt-1 transform px-2 w-screen max-w-[200px] sm:px-0',
                 isMobile ? 'relative w-full max-w-none px-0' : 'left-1/2 -translate-x-1/2'
               )}
             >
-              <div className="overflow-hidden rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 backdrop-blur-sm">
-                <div className="relative bg-white/95">
+              <div className="overflow-hidden rounded-lg shadow-lg">
+                <div className="relative bg-white">
                   {group.items.map((item, idx) => (
                     <Link
                       key={item.path}
                       to={item.path}
                       className={classNames(
-                        "flex items-center px-4 py-3 transition-all duration-200",
-                        "hover:bg-indigo-50/50 hover:pl-6",
+                        "flex items-center px-4 py-2 transition-colors",
+                        "hover:bg-indigo-50",
                         idx !== group.items.length - 1 ? "border-b border-gray-100" : ""
                       )}
                       onClick={() => {
-                        close(); // Close dropdown
-                        onItemClick?.(); // Call any additional click handlers
+                        close();
+                        onItemClick?.();
                       }}
                     >
-                      <div className={classNames(
-                        "flex items-center justify-center flex-shrink-0 w-8 h-8",
-                        "text-gray-400 transition-colors duration-200 group-hover:text-indigo-500"
-                      )}>
+                      <div className="text-gray-400 group-hover:text-indigo-500">
                         {item.icon}
                       </div>
                       <div className="ml-3">
@@ -151,11 +159,6 @@ function NavbarDropdown({ group, isMobile, onItemClick }) {
                           {item.label}
                         </p>
                       </div>
-                      {location.pathname === item.path && (
-                        <div className="ml-auto">
-                          <div className="h-2 w-2 rounded-full bg-indigo-500"></div>
-                        </div>
-                      )}
                     </Link>
                   ))}
                 </div>
@@ -174,8 +177,10 @@ export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [roleDetected, setRoleDetected] = useState("public");
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { contract, signer } = useSmartContract();
 
   useEffect(() => {
     if (authState.role) {
@@ -190,6 +195,21 @@ export default function Navbar() {
       setRoleDetected("public");
     }
   }, [authState.role, authState.isVerified]);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!contract || !signer) return;
+      try {
+        const address = await signer.getAddress();
+        const owner = await contract.owner();
+        setIsAdmin(address.toLowerCase() === owner.toLowerCase());
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+      }
+    };
+
+    checkAdmin();
+  }, [contract, signer]);
 
   const handleLogin = async () => {
     if (!window.ethereum) {
@@ -252,7 +272,7 @@ export default function Navbar() {
   };
 
   const menus = authState.walletAddress
-    ? menuItems[roleDetected] || menuItems.public
+    ? [...(menuItems[roleDetected] || menuItems.public), ...(isAdmin ? menuItems.admin : [])]
     : menuItems.public;
 
   const renderMenuItems = (items, isMobile = false) => {
@@ -287,7 +307,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-white shadow-lg">
+    <nav className="bg-white shadow">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           {/* Logo and main navigation */}
@@ -310,7 +330,7 @@ export default function Navbar() {
             {authState.isLogged && authState.walletAddress ? (
               <div className="hidden md:flex items-center space-x-4">
                 {/* Token Balance */}
-                <div className="flex items-center px-4 py-2 bg-gray-50 rounded-lg">
+                <div className="flex items-center px-3 py-2 bg-gray-50 rounded-md">
                   <div className="flex items-center">
                     <CurrencyDollarIcon className="h-5 w-5 text-gray-600 mr-2" />
                     <span className="text-sm font-medium">{tokenBalance}</span>
@@ -326,7 +346,7 @@ export default function Navbar() {
 
                 {/* Wallet & Logout */}
                 <div className="flex items-center space-x-3">
-                  <div className="flex items-center px-3 py-2 bg-gray-100 rounded-lg">
+                  <div className="flex items-center px-3 py-2 bg-gray-50 rounded-md">
                     <WalletIcon className="h-5 w-5 text-gray-600 mr-2" />
                     <span className="text-sm font-mono text-gray-800">
                       {`${authState.walletAddress.slice(0, 6)}...${authState.walletAddress.slice(-4)}`}
@@ -334,7 +354,7 @@ export default function Navbar() {
                   </div>
                   <button
                     onClick={handleLogout}
-                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                    className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
                   >
                     Đăng xuất
                   </button>
@@ -344,7 +364,7 @@ export default function Navbar() {
               <button
                 onClick={handleLogin}
                 disabled={isConnecting}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
                 {isConnecting ? (
                   <>
@@ -389,7 +409,7 @@ export default function Navbar() {
             <div className="pt-4 pb-3 border-t border-gray-200">
               <div className="px-2 space-y-3">
                 {/* Token Balance */}
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
                   <div className="flex items-center">
                     <CurrencyDollarIcon className="h-5 w-5 text-gray-600 mr-2" />
                     <span className="text-sm font-medium">{tokenBalance}</span>
@@ -407,7 +427,7 @@ export default function Navbar() {
                 </div>
 
                 {/* Wallet Address */}
-                <div className="flex items-center p-3 bg-gray-100 rounded-lg">
+                <div className="flex items-center p-3 bg-gray-50 rounded-md">
                   <WalletIcon className="h-5 w-5 text-gray-600 mr-2" />
                   <span className="text-sm font-mono text-gray-800">
                     {`${authState.walletAddress.slice(0, 6)}...${authState.walletAddress.slice(-4)}`}
@@ -420,7 +440,7 @@ export default function Navbar() {
                     handleLogout();
                     setIsMobileMenuOpen(false);
                   }}
-                  className="w-full px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                  className="w-full px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
                 >
                   Đăng xuất
                 </button>

@@ -52,15 +52,15 @@ const formatTokenAmount = (weiAmount, { hideUnit = false } = {}) => {
     // Special case for zero
     if (tokenAmount === BigInt(0)) return "0" + unit;
     
-    // Convert to number for formatting, but handle large numbers carefully
-    const absNum = Number(tokenAmount);
-    
-    // Validate the number is reasonable (max 1 trillion tokens)
-    const MAX_REASONABLE_TOKENS = 1e12; // 1 trillion
-    if (absNum > MAX_REASONABLE_TOKENS) {
-      console.warn('Unreasonably large token amount detected:', absNum);
-      return "Error: Invalid Amount" + unit;
+    // For extremely large numbers, show in scientific notation
+    if (rawAmount.length > 15) {
+      const firstFew = rawAmount.slice(0, 4); // Get first 4 digits
+      const exponent = rawAmount.length - 1; // Calculate the exponent
+      return `${firstFew[0]}.${firstFew.slice(1)}e${exponent}` + unit;
     }
+    
+    // Convert to number for normal formatting
+    const absNum = Number(tokenAmount);
     
     // Format large numbers
     if (absNum >= 1e9) {
@@ -79,7 +79,7 @@ const formatTokenAmount = (weiAmount, { hideUnit = false } = {}) => {
   } catch (error) {
     console.error("Error formatting token amount:", error);
     console.error("Input value:", weiAmount);
-    return "Error: Invalid Amount" + unit;
+    return "0" + unit; // Return 0 instead of error message
   }
 };
 

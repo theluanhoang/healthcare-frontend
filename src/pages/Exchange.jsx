@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useSmartContract } from "../hooks";
 import { toast } from "react-toastify";
 import { ethers } from "ethers";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowsRightLeftIcon,
   WalletIcon,
@@ -20,6 +20,7 @@ export default function Exchange() {
   const [ethBalance, setEthBalance] = useState("0");
   const [loading, setLoading] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Format number with better readability
   const formatNumber = (value) => {
@@ -40,8 +41,8 @@ export default function Exchange() {
       return value.toFixed(6).replace(/\.?0+$/, '');
     }
     
-    // Số lớn hơn 1, hiển thị tối đa 4 chữ số thập phân
-    return value.toFixed(4).replace(/\.?0+$/, '');
+    // Số lớn hơn 1, hiển thị tối đa 2 chữ số thập phân
+    return value.toFixed(2).replace(/\.?0+$/, '');
   };
 
   // Format large numbers to K, M, B format
@@ -51,13 +52,13 @@ export default function Exchange() {
     
     const absNum = Math.abs(num);
     if (absNum >= 1e9) {
-      return (num / 1e9).toFixed(1) + 'B';
+      return (num / 1e9).toFixed(2) + 'B';
     }
     if (absNum >= 1e6) {
-      return (num / 1e6).toFixed(1) + 'M';
+      return (num / 1e6).toFixed(2) + 'M';
     }
     if (absNum >= 1e3) {
-      return (num / 1e3).toFixed(1) + 'K';
+      return (num / 1e3).toFixed(2) + 'K';
     }
     return num.toFixed(2);
   };
@@ -126,7 +127,8 @@ export default function Exchange() {
     
     if (value) {
       const numValue = Number(value);
-      const userTokensNum = Number(ethers.formatEther(userTokens));
+      // So sánh trực tiếp với raw balance
+      const userTokensNum = Number(userTokens);
       
       if (isNaN(numValue) || numValue <= 0) {
         setExchangeError("Vui lòng nhập số lượng hợp lệ");
@@ -138,14 +140,17 @@ export default function Exchange() {
 
   // Đổi token lấy gas
   const exchangeTokens = async () => {
-    if (!contract || !signer || !exchangeAmount) return;
-    
+    if (!contract || !signer) {
+      toast.error("Vui lòng kết nối ví MetaMask");
+      return;
+    }
+
     try {
       setLoading(true);
       
       // Validate số lượng
       const numValue = Number(exchangeAmount);
-      const userTokensNum = Number(ethers.formatEther(userTokens.toString()));
+      const userTokensNum = Number(userTokens);
       
       if (numValue > userTokensNum) {
         toast.error("Số dư token không đủ");
@@ -157,181 +162,187 @@ export default function Exchange() {
         return;
       }
 
-      // Giới hạn số lượng token tối đa có thể đổi trong một lần
-      if (numValue > 10000) {
-        toast.error("Số lượng token tối đa có thể đổi là 10,000 HCT");
+      // Lấy địa chỉ user và contract
+      const userAddress = await signer.getAddress();
+      console.log("Exchange info:", {
+        userAddress,
+        contractAddress: contract.target,
+        userTokenBalance: userTokensNum
+      });
+
+      // Kiểm tra số dư ETH của contract trước khi thực hiện giao dịch
+      const contractETHBalance = await signer.provider.getBalance(contract.target);
+      console.log("Contract ETH balance:", ethers.formatEther(contractETHBalance), "ETH");
+
+      if (contractETHBalance === BigInt(0)) {
+        toast.error("Smart contract không có ETH để thực hiện giao dịch. Vui lòng thông báo cho admin.");
         return;
       }
 
-      // Kiểm tra số lượng token có hợp lệ không
-      if (!Number.isFinite(numValue) || Number.isNaN(numValue)) {
-        toast.error("Số lượng token không hợp lệ");
+      // Lấy tỷ lệ quy đổi từ contract
+      const tokenToGasRate = await contract.tokenToGasRate();
+      console.log("Token to gas rate:", tokenToGasRate.toString());
+
+      // Kiểm tra số token có phải là bội số của tokenToGasRate
+      if (numValue % Number(tokenToGasRate) !== 0) {
+        toast.error(`Số lượng token phải là bội số của ${tokenToGasRate.toString()}`);
         return;
       }
+
+      // Convert số lượng token thành BigNumber không sử dụng decimals
+      const tokenAmountBN = BigInt(numValue);
+      console.log("Token amount (BigInt):", tokenAmountBN.toString());
+
+      // Tính toán số ETH sẽ nhận được (với Wei)
+      const oneEtherInWei = ethers.parseEther("1.0");
+      const expectedETH = (tokenAmountBN * oneEtherInWei) / BigInt(tokenToGasRate);
+      console.log("Exchange details:", {
+        tokenAmount: tokenAmountBN.toString(),
+        rate: tokenToGasRate.toString(),
+        expectedETH: expectedETH.toString(),
+        expectedETHInEther: ethers.formatEther(expectedETH)
+      });
 
       // Kiểm tra số dư ETH của contract
-      const contractBalance = await signer.provider.getBalance(contract.target);
-      console.log("Contract ETH balance:", ethers.formatEther(contractBalance));
+      if (contractETHBalance < expectedETH) {
+        toast.error(`Smart contract không đủ ETH để thực hiện giao dịch (cần ${ethers.formatEther(expectedETH)} ETH). Vui lòng thông báo cho admin.`);
+        return;
+      }
+
+      // Lưu số dư ETH của user trước khi giao dịch
+      const userETHBalanceBefore = await signer.provider.getBalance(userAddress);
+      console.log("User ETH balance before:", ethers.formatEther(userETHBalanceBefore), "ETH");
+
+      // Kiểm tra allowance
+      const allowance = await contract.allowance(userAddress, contract.target);
+      console.log("Allowance check:", {
+        current: allowance.toString(),
+        required: tokenAmountBN.toString(),
+        hasEnough: allowance >= tokenAmountBN
+      });
+
+      if (allowance < tokenAmountBN) {
+        const approveTx = await contract.approve(contract.target, tokenAmountBN);
+        toast.info("Đang xử lý approve token...");
+        await approveTx.wait();
+        toast.success("Đã approve token thành công!");
+      }
+
+      // Chuẩn bị transaction parameters
+      const txParams = {
+        gasLimit: BigInt(300000)  // Tăng gas limit
+      };
+
+      console.log("Transaction parameters:", {
+        ...txParams,
+        tokenAmount: tokenAmountBN.toString()
+      });
+
+      // Thực hiện giao dịch
+      const tx = await contract.exchangeTokensForGas(tokenAmountBN, txParams);
+
+      console.log("Transaction sent:", {
+        hash: tx.hash,
+        data: tx.data,
+        ...tx
+      });
+
+      toast.info("Đang xử lý giao dịch...");
+      const receipt = await tx.wait();
       
-      // Tính toán số token cần thiết (đảm bảo đúng format)
-      const tokenAmount = ethers.parseUnits(numValue.toString(), 18);
-      console.log("Token amount in wei:", tokenAmount.toString());
+      if (receipt.status === 1) {
+        // Đợi một chút để các thay đổi được cập nhật trên blockchain
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Tính toán số ETH sẽ nhận được (100,000 token = 1 ETH)
-      // Vì tokenAmount đã là Wei, chúng ta chỉ cần chia cho tỷ lệ
-      const expectedETH = tokenAmount / BigInt(100000);
-      console.log("Expected ETH in wei:", expectedETH.toString());
-      console.log("Expected ETH in ether:", ethers.formatEther(expectedETH));
-
-      if (contractBalance < expectedETH) {
-        toast.error("Smart contract không đủ ETH để thực hiện giao dịch. Vui lòng thông báo cho admin.");
-        console.log("Required ETH:", ethers.formatEther(expectedETH));
-        console.log("Contract balance:", ethers.formatEther(contractBalance));
-        return;
-      }
-
-      // Kiểm tra allowance với số Wei chính xác
-      try {
-        const allowance = await contract.allowance(await signer.getAddress(), contract.target);
-        console.log("Current allowance:", allowance.toString());
-        console.log("Required amount:", tokenAmount.toString());
+        // Kiểm tra số dư ETH của user sau giao dịch
+        const userETHBalanceAfter = await signer.provider.getBalance(userAddress);
+        const ethDifference = userETHBalanceAfter - userETHBalanceBefore;
         
-        if (allowance < tokenAmount) {
-          // Nếu chưa approve đủ, thực hiện approve với số Wei chính xác
-          const approveTx = await contract.approve(contract.target, tokenAmount);
-          
-          toast.info("Đang xử lý approve token...", {
-            autoClose: false,
-            toastId: "processing-approve"
-          });
-            
-          await approveTx.wait();
-          toast.dismiss("processing-approve");
-          toast.success("Đã approve token thành công!");
-        }
-      } catch (error) {
-        console.error("Error checking/setting allowance:", error);
-        if (error.code === 'ACTION_REJECTED') {
-          toast.error("Bạn đã từ chối approve token");
+        console.log("Exchange result:", {
+          ethBalanceBefore: ethers.formatEther(userETHBalanceBefore),
+          ethBalanceAfter: ethers.formatEther(userETHBalanceAfter),
+          difference: ethers.formatEther(ethDifference),
+          gasCost: ethers.formatEther(userETHBalanceBefore - userETHBalanceAfter)
+        });
+
+        // Kiểm tra số dư token sau giao dịch
+        const newTokenBalance = await contract.balanceOf(userAddress);
+        console.log("Token balance after:", {
+          before: userTokensNum,
+          after: newTokenBalance.toString(),
+          difference: userTokensNum - Number(newTokenBalance)
+        });
+
+        // Kiểm tra số dư ETH của contract sau giao dịch
+        const contractETHBalanceAfter = await signer.provider.getBalance(contract.target);
+        console.log("Contract ETH balance after:", {
+          before: ethers.formatEther(contractETHBalance),
+          after: ethers.formatEther(contractETHBalanceAfter),
+          difference: ethers.formatEther(contractETHBalance - contractETHBalanceAfter)
+        });
+
+        if (ethDifference <= BigInt(0)) {
+          toast.warning("Token đã được đổi nhưng có thể có vấn đề với việc nhận ETH. Vui lòng kiểm tra lại số dư và liên hệ admin.");
         } else {
-          toast.error("Không thể approve token");
-        }
-        return;
-      }
-
-      // Thực hiện đổi token
-      try {
-        toast.info("Đang xử lý giao dịch...", {
-          autoClose: false,
-          toastId: "processing-exchange"
-        });
-
-        // Log thêm thông tin debug
-        const from = await signer.getAddress();
-        console.log("Debug info:", {
-          from,
-          to: contract.target,
-          tokenAmount: tokenAmount.toString(),
-          contractBalance: contractBalance.toString(),
-          expectedETH: expectedETH.toString()
-        });
-
-        // Lấy nonce hiện tại
-        const nonce = await signer.provider.getTransactionCount(from, "latest");
-        console.log("Current nonce:", nonce);
-
-        // Lấy gas price hiện tại
-        const feeData = await signer.provider.getFeeData();
-        console.log("Fee data:", {
-          gasPrice: feeData.gasPrice?.toString(),
-          maxFeePerGas: feeData.maxFeePerGas?.toString(),
-          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString()
-        });
-
-        // Chuẩn bị transaction data
-        const data = contract.interface.encodeFunctionData("exchangeTokensForGas", [tokenAmount]);
-        console.log("Encoded function data:", data);
-
-        // Tạo transaction object
-        const tx = {
-          from,
-          to: contract.target,
-          data,
-          nonce,
-          gasLimit: ethers.toBigInt("200000"),
-          type: 2, // EIP-1559
-          maxFeePerGas: feeData.maxFeePerGas,
-          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas
-        };
-
-        console.log("Transaction object:", tx);
-
-        // Gửi transaction
-        const response = await signer.sendTransaction(tx);
-        console.log("Transaction sent:", response.hash);
-
-        // Chờ giao dịch hoàn thành với timeout 5 phút
-        const receipt = await Promise.race([
-          response.wait(),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Giao dịch quá thời gian chờ")), 300000)
-          )
-        ]);
-
-        // Đóng toast đang xử lý
-        toast.dismiss("processing-exchange");
-        
-        if (receipt.status === 1) {
-          toast.success("Đổi token thành công!");
-          
-          // Chờ một chút để blockchain cập nhật
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
-          // Cập nhật số token và số dư ETH
-          await fetchTokenBalance();
-          await updateEthBalance();
-          setExchangeAmount("");
-          setExchangeError("");
-        } else {
-          console.error("Transaction failed:", receipt);
-          toast.error("Giao dịch thất bại");
-        }
-      } catch (error) {
-        console.error("Error in token exchange:", error);
-        
-        // Đóng toast đang xử lý
-        toast.dismiss("processing-exchange");
-
-        // Xử lý các loại lỗi cụ thể
-        if (error.code === 'ACTION_REJECTED') {
-          toast.error("Giao dịch đã bị hủy");
-        } else if (error.code === 'INSUFFICIENT_FUNDS') {
-          toast.error("Không đủ ETH để thanh toán gas");
-        } else if (error.message?.includes('timeout')) {
-          toast.error("Giao dịch đã quá thời gian chờ. Vui lòng kiểm tra sau.");
-        } else if (error.data?.message?.includes('insufficient allowance')) {
-          toast.error("Chưa được phép sử dụng đủ số token này");
-        } else if (error.data?.message?.includes('insufficient balance')) {
-          toast.error("Số dư token không đủ");
-        } else if (error.data?.message?.includes('execution reverted')) {
-          toast.error("Smart contract từ chối giao dịch. Có thể contract không đủ ETH.");
-        } else {
-          toast.error("Không thể thực hiện giao dịch. Vui lòng thử lại sau");
+          toast.success(`Đổi token thành công! Nhận được ${ethers.formatEther(ethDifference)} ETH`);
         }
 
-        // Log chi tiết lỗi để debug
-        console.log("Error details:", {
-          code: error.code,
-          message: error.message,
-          data: error.data,
-          transaction: error.transaction
-        });
-      } finally {
-        setLoading(false);
+        await fetchTokenBalance();
+        await updateEthBalance();
+        setExchangeAmount("");
+      } else {
+        console.error("Transaction failed:", receipt);
+        toast.error("Giao dịch thất bại");
       }
     } catch (error) {
       console.error("Error in token exchange:", error);
-      toast.error("Có lỗi xảy ra khi thực hiện giao dịch");
+      
+      // Log chi tiết lỗi để debug
+      console.log("Detailed error:", {
+        code: error.code,
+        message: error.message,
+        data: error.data,
+        transaction: error.transaction,
+        error: error
+      });
+
+      // Xử lý các loại lỗi
+      if (error.code === 'ACTION_REJECTED') {
+        toast.error("Giao dịch đã bị hủy");
+      } else if (error.code === 'INSUFFICIENT_FUNDS') {
+        toast.error("Không đủ ETH để thanh toán gas fee");
+      } else if (error.data?.message?.includes('insufficient allowance')) {
+        toast.error("Chưa được phép sử dụng đủ số token này");
+      } else if (error.data?.message?.includes('insufficient balance')) {
+        toast.error("Số dư token không đủ");
+      } else if (error.data?.message?.includes('execution reverted')) {
+        toast.error("Smart contract từ chối giao dịch. Có thể contract không đủ ETH.");
+      } else {
+        toast.error("Không thể thực hiện giao dịch. Vui lòng thử lại sau");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      setIsConnecting(true);
+      await login();
+      
+      // Kiểm tra thông tin user
+      const user = await contract.getUser(await signer.getAddress());
+      if (!user || (user[0].toString() === "0" && !user[2])) {
+        // Nếu user chưa đăng ký (role = 0 và không có fullName), chuyển đến trang đăng ký
+        navigate("/register");
+      } else {
+        navigate("/");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error("Không thể kết nối ví");
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -360,7 +371,7 @@ export default function Exchange() {
                     {tokenBalance}
                   </p>
                   <p className="text-sm text-gray-500">
-                    ≈ {formatEthValue(Number(userTokens) * 0.00001)} {/* 1 Token = 0.00001 ETH */}
+                    ≈ {formatEthValue(Number(userTokens) / 100000)} {/* 100000 token = 1 ETH */}
                   </p>
                 </div>
                 <div>
@@ -386,13 +397,18 @@ export default function Exchange() {
                 <h3 className="text-sm font-medium text-gray-500 mb-2">Tỷ giá quy đổi</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <p className="text-lg font-semibold">1 HCT</p>
+                    <p className="text-lg font-semibold">100,000 HTC</p>
                     <p className="text-sm text-gray-500">Token</p>
                   </div>
                   <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <p className="text-lg font-semibold">0.001 ETH</p>
+                    <p className="text-lg font-semibold">1 ETH</p>
                     <p className="text-sm text-gray-500">Ethereum</p>
                   </div>
+                </div>
+                <div className="mt-2 space-y-1 text-sm text-gray-500">
+                  <p>• Số lượng tối thiểu: 1,000 HTC</p>
+                  <p>• Bạn cần tối thiểu 100,000 HTC để nhận được 1 ETH</p>
+                  <p>• Token sẽ được chuyển đổi theo tỷ lệ 100,000 HTC = 1 ETH</p>
                 </div>
               </div>
 
@@ -426,10 +442,10 @@ export default function Exchange() {
                   ) : exchangeAmount ? (
                     <div className="mt-1 space-y-1">
                       <p className="text-sm text-gray-500">
-                        = {formatLargeNumber(Number(exchangeAmount))} HCT
+                        = {formatLargeNumber(Number(exchangeAmount))} HTC
                       </p>
                       <p className="text-sm text-gray-500">
-                        ≈ {formatLargeNumber(Number(exchangeAmount) * 0.001)} ETH
+                        ≈ {formatNumber(Number(exchangeAmount) / 100000)} ETH
                       </p>
                     </div>
                   ) : null}

@@ -7,6 +7,7 @@ import {
   DocumentTextIcon,
   UserGroupIcon,
   ArrowsRightLeftIcon,
+  BanknotesIcon,
 } from "@heroicons/react/24/outline";
 import { useSmartContract } from "../../hooks";
 import { useEffect, useState } from "react";
@@ -71,6 +72,13 @@ function Sidebar() {
       icon: ArrowsRightLeftIcon,
       path: "/exchange",
     },
+    ...(isAdmin ? [
+      {
+        name: "Nạp ETH",
+        icon: BanknotesIcon,
+        path: "/admin/fund",
+      }
+    ] : []),
   ];
 
   return (

@@ -22,6 +22,7 @@ import SurveyManagement from "../pages/admin/SurveyManagement"
 import SurveyList from "../pages/user/SurveyList"
 import TakeSurvey from "../pages/user/TakeSurvey"
 import Exchange from "../pages/Exchange"
+import AdminFund from "../pages/AdminFund"
 import ProtectedAdminRoute from "../components/ProtectedAdminRoute"
 
 function AppRoutes() {
@@ -54,6 +55,14 @@ function AppRoutes() {
         element={
           <ProtectedAdminRoute>
             <SurveyManagement />
+          </ProtectedAdminRoute>
+        }
+      />
+      <Route
+        path="/admin/fund"
+        element={
+          <ProtectedAdminRoute>
+            <AdminFund />
           </ProtectedAdminRoute>
         }
       />

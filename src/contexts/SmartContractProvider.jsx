@@ -9,7 +9,7 @@ import { initWebSocket, sendWebSocketMessage, closeWebSocket } from "../utils/we
 
 export const SmartContractContext = createContext();
 
-const contractAddress = "0x32aE544C4284d5B78e764A36124A98F6eE8c08cF";
+const contractAddress = "0xA37684A837302604b01dc5C95706dd2932A1A051";
 const RETRY_DELAY = 2000; // 2 seconds
 const MAX_RETRIES = 3;
 const INIT_TIMEOUT = 10000; // 10 seconds
