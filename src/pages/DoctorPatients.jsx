@@ -209,7 +209,7 @@ function DoctorPatients() {
         <div className="container mx-auto px-6">
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Sidebar Navigation */}
-            <Sidebar />
+             <Sidebar />
 
             {/* Patients Content */}
             <div className="lg:w-3/4 space-y-8">
@@ -218,36 +218,36 @@ function DoctorPatients() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-800">
-                      Danh sách bệnh nhân
-                    </h2>
+                Danh sách bệnh nhân
+              </h2>
                     <p className="text-gray-600 mt-1">
                       Tổng số: {filteredPatients.length} bệnh nhân
                     </p>
                   </div>
-                  
-                  {/* Search Form */}
-                  <form
-                    onSubmit={handleSubmit(onSearch)}
+
+              {/* Search Form */}
+              <form
+                onSubmit={handleSubmit(onSearch)}
                     className="flex flex-col sm:flex-row gap-4"
-                  >
-                    <input
-                      type="text"
-                      {...register("searchQuery")}
+              >
+                <input
+                  type="text"
+                  {...register("searchQuery")}
                       placeholder="Tìm kiếm theo tên, email, số điện thoại..."
                       className="flex-1 min-w-[300px] p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                    />
-                    <button
-                      type="submit"
-                      className="py-3 px-6 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
-                    >
-                      Tìm kiếm
-                    </button>
-                  </form>
+                />
+                <button
+                  type="submit"
+                  className="py-3 px-6 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300 transform hover:scale-105"
+                >
+                  Tìm kiếm
+                </button>
+              </form>
                 </div>
 
-                {errors.searchQuery && (
-                  <p className="text-red-500 text-sm mb-4">{errors.searchQuery.message}</p>
-                )}
+              {errors.searchQuery && (
+                <p className="text-red-500 text-sm mb-4">{errors.searchQuery.message}</p>
+              )}
 
                 {/* Loading State */}
                 {isLoading ? (
@@ -265,11 +265,11 @@ function DoctorPatients() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredPatients.map((patient) => (
+                      {filteredPatients.map((patient) => (
                       <div
-                        key={patient.id}
+                          key={patient.id}
                         className="bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group"
-                      >
+                        >
                         <div className="p-6">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-3">
@@ -324,9 +324,9 @@ function DoctorPatients() {
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                </div>
+              )}
               </div>
             </div>
           </div>

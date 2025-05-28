@@ -55,7 +55,7 @@ export default function TakeSurvey() {
           return;
         }
 
-        // Log time values for debugging
+        // Log time values for debugging (keeping this for reference)
         const now = Math.floor(Date.now() / 1000);
         const startTime = Number(surveyData.startTime);
         const endTime = Number(surveyData.endTime);
@@ -68,12 +68,7 @@ export default function TakeSurvey() {
           formattedEndTime: new Date(endTime * 1000).toLocaleString()
         });
 
-        // Check survey time
-        if (now < startTime) {
-          setError(`Khảo sát sẽ bắt đầu vào ${new Date(startTime * 1000).toLocaleString()}`);
-          return;
-        }
-
+        // Only check end time
         if (now > endTime) {
           setError('Khảo sát đã kết thúc');
           return;
@@ -185,21 +180,21 @@ export default function TakeSurvey() {
         return;
       }
 
-      const now = Math.floor(Date.now() / 1000);
-      if (now < Number(surveyData.startTime)) {
-        toast.error('Khảo sát chưa bắt đầu');
-        return;
-      }
+      // const now = Math.floor(Date.now() / 1000);
+      // if (now < Number(surveyData.startTime)) {
+      //   toast.error('Khảo sát chưa bắt đầu');
+      //   return;
+      // }
 
-      if (now > Number(surveyData.endTime)) {
-        toast.error('Khảo sát đã kết thúc');
-        return;
-      }
+      // if (now > Number(surveyData.endTime)) {
+      //   toast.error('Khảo sát đã kết thúc');
+      //   return;
+      // }
 
-      if (Number(surveyData.targetRole) !== Number(userData.role)) {
-        toast.error(`Khảo sát này chỉ dành cho ${surveyData.targetRole === Role.PATIENT ? 'bệnh nhân' : 'bác sĩ'}`);
-        return;
-      }
+      // if (Number(surveyData.targetRole) !== Number(userData.role)) {
+      //   toast.error(`Khảo sát này chỉ dành cho ${surveyData.targetRole === Role.PATIENT ? 'bệnh nhân' : 'bác sĩ'}`);
+      //   return;
+      // }
 
       // Check if already completed
       const hasCompleted = await contract.hasSurveyCompleted(surveyId, userAddress);

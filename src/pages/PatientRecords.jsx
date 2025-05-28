@@ -31,14 +31,14 @@ function PatientRecords() {
 
   // Di chuyển hàm fetchRecords ra ngoài useEffect
   const fetchRecords = useCallback(async () => {
-    if (walletAddress) {
-      try {
-        const records = await getMedicalRecords()
-        setMedicalRecords(records)
-      } catch (error) {
-        console.error("Lỗi tải hồ sơ y tế:", error)
+      if (walletAddress) {
+        try {
+          const records = await getMedicalRecords()
+          setMedicalRecords(records)
+        } catch (error) {
+          console.error("Lỗi tải hồ sơ y tế:", error)
+        }
       }
-    }
   }, [walletAddress, getMedicalRecords]);
 
   useEffect(() => {

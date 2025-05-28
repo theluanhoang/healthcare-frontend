@@ -91,7 +91,7 @@ function Sidebar() {
               />
               <span className="truncate">{item.name}</span>
             </Link>
-          ))}
+        ))}
         </nav>
       </div>
     </div>

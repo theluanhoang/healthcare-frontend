@@ -40,15 +40,15 @@ function DoctorPatientAccess() {
 
   // Di chuyển hàm fetchData ra ngoài useEffect
   const fetchData = useCallback(async () => {
-    if (walletAddress) {
-      try {
-        const [patients, shared] = await Promise.all([fetchAuthorizedPatients(), getSharedRecordsByDoctor()])
-        setLocalAuthorizedPatients(patients)
-        setSharedRecords(shared)
-      } catch (error) {
-        console.error("Lỗi tải dữ liệu:", error)
+      if (walletAddress) {
+        try {
+          const [patients, shared] = await Promise.all([fetchAuthorizedPatients(), getSharedRecordsByDoctor()])
+          setLocalAuthorizedPatients(patients)
+          setSharedRecords(shared)
+        } catch (error) {
+          console.error("Lỗi tải dữ liệu:", error)
+        }
       }
-    }
   }, [walletAddress, fetchAuthorizedPatients, getSharedRecordsByDoctor]);
 
   useEffect(() => {

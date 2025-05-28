@@ -72,7 +72,7 @@ function DoctorAnalysis() {
   const [filteredRecords, setFilteredRecords] = useState([]);
   const initialized = useRef(false);
   const isMounted = useRef(true);
-  
+
   const {
     register,
     handleSubmit,
@@ -375,12 +375,12 @@ function DoctorAnalysis() {
                   </div>
 
                   <div className="md:col-span-2 lg:col-span-4">
-                    <button
-                      type="submit"
+                  <button
+                    type="submit"
                       className="w-full py-3 px-6 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-500 rounded-lg hover:from-indigo-700 hover:to-blue-600 shadow-md transition-all duration-300"
-                    >
+                  >
                       Lọc dữ liệu
-                    </button>
+                  </button>
                   </div>
                 </form>
               </div>
@@ -424,44 +424,44 @@ function DoctorAnalysis() {
 
                 {/* Data Table */}
                 <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                <h3 className="text-xl font-semibold text-gray-800 mb-4">
                     Chi tiết bệnh án ({filteredRecords.length})
-                  </h3>
+                </h3>
                   {filteredRecords.length === 0 ? (
                     <p className="text-gray-600 text-center py-8">
                       Không có dữ liệu để hiển thị.
                     </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full table-auto">
-                        <thead>
-                          <tr className="bg-gray-100">
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                              Bệnh nhân
-                            </th>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full table-auto">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                            Bệnh nhân
+                          </th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
                               Loại bệnh án
                             </th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
                               Ngày tạo
                             </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
-                              Chẩn đoán
-                            </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
+                            Chẩn đoán
+                          </th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">
                               Trạng thái
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
                           {filteredRecords.map((record) => {
                             const ipfsData = data.recordDetails[record.ipfsHash];
                             const patient = data.patientDetails[record.patientAddress];
                             return (
-                              <tr
+                          <tr
                                 key={record.id}
-                                className="border-b hover:bg-gray-50 transition-all duration-200"
-                              >
+                            className="border-b hover:bg-gray-50 transition-all duration-200"
+                          >
                                 <td className="px-4 py-3 text-gray-700">
                                   {patient?.name || "N/A"}
                                 </td>
@@ -492,13 +492,13 @@ function DoctorAnalysis() {
                                     {record.isApproved ? "Đã xác nhận" : "Chờ xác nhận"}
                                   </span>
                                 </td>
-                              </tr>
+                          </tr>
                             );
                           })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 </div>
               </div>
             </div>

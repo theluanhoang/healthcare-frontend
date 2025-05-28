@@ -362,10 +362,10 @@ function DoctorAddRecord() {
                         patientsList
                           .filter(patient => patient.isAuthorized)
                           .map((patient) => (
-                            <option key={patient.address} value={patient.address}>
-                              {patient.fullName} ({patient.address.slice(0, 6)}...{patient.address.slice(-4)})
-                            </option>
-                          ))
+                          <option key={patient.address} value={patient.address}>
+                            {patient.fullName} ({patient.address.slice(0, 6)}...{patient.address.slice(-4)})
+                          </option>
+                        ))
                       ) : (
                         <option value="" disabled>
                           Không có bệnh nhân đã cấp quyền
