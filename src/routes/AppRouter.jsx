@@ -21,6 +21,7 @@ import PatientDetail from "../pages/PatientDetail"
 import SurveyManagement from "../pages/admin/SurveyManagement"
 import SurveyList from "../pages/user/SurveyList"
 import TakeSurvey from "../pages/user/TakeSurvey"
+import Exchange from "../pages/Exchange"
 import ProtectedAdminRoute from "../components/ProtectedAdminRoute"
 
 function AppRoutes() {
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/doctor/patient/:patientAddress" element={<PatientDetail />} />
       <Route path="/surveys" element={<SurveyList />} />
       <Route path="/survey/:surveyId" element={<TakeSurvey />} />
+      <Route path="/exchange" element={<Exchange />} />
       <Route
         path="/admin/surveys"
         element={

@@ -6,6 +6,7 @@ import {
   ChartBarIcon,
   DocumentTextIcon,
   UserGroupIcon,
+  ArrowsRightLeftIcon,
 } from "@heroicons/react/24/outline";
 import { useSmartContract } from "../../hooks";
 import { useEffect, useState } from "react";
@@ -65,6 +66,11 @@ function Sidebar() {
       icon: DocumentTextIcon,
       path: isAdmin ? "/admin/surveys" : "/surveys",
     },
+    {
+      name: "Đổi HTC - ETH",
+      icon: ArrowsRightLeftIcon,
+      path: "/exchange",
+    },
   ];
 
   return (
@@ -91,7 +97,7 @@ function Sidebar() {
               />
               <span className="truncate">{item.name}</span>
             </Link>
-        ))}
+          ))}
         </nav>
       </div>
     </div>

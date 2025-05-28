@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useSmartContract } from '../../hooks';
 import { useAuth } from '../../hooks';
 import useIpfs from '../../hooks/useIPFS';
+import { useToken } from '../../contexts/TokenProvider';
 import { toast } from 'react-toastify';
 import {
   ArrowLeftIcon,
@@ -22,6 +23,7 @@ export default function TakeSurvey() {
   const { contract, signer } = useSmartContract();
   const { authState } = useAuth();
   const { getJson, uploadJson, isReady } = useIpfs();
+  const { fetchTokenBalance, formatTokenAmount } = useToken();
   const [survey, setSurvey] = useState(null);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -141,144 +143,121 @@ export default function TakeSurvey() {
 
     try {
       setSubmitting(true);
-
-      // Validate all questions are answered
-      const unansweredQuestions = Object.entries(answers).filter(([_, value]) => !value.trim());
-      if (unansweredQuestions.length > 0) {
-        toast.error('Vui lòng trả lời tất cả các câu hỏi');
-        return;
-      }
-
-      // Check user registration again before submitting
+      console.log('Starting survey submission for surveyId:', surveyId);
       const userAddress = await signer.getAddress();
-      const userData = await contract.users(userAddress);
-      console.log('User data:', {
-        address: userAddress,
-        role: Number(userData.role),
-        isVerified: userData.isVerified
-      });
-
-      if (userData.role === Role.NONE) {
-        toast.error('Vui lòng đăng ký tài khoản trước khi thực hiện khảo sát');
-        return;
-      }
-
-      // Get latest survey data to check conditions
-      const surveyData = await contract.surveys(surveyId);
-      console.log('Survey data:', {
-        id: surveyId,
-        isActive: surveyData.isActive,
-        targetRole: Number(surveyData.targetRole),
-        startTime: Number(surveyData.startTime),
-        endTime: Number(surveyData.endTime),
-        currentTime: Math.floor(Date.now() / 1000)
-      });
-
-      // Validate survey conditions
-      if (!surveyData.isActive) {
-        toast.error('Khảo sát này không còn hoạt động');
-        return;
-      }
-
-      // const now = Math.floor(Date.now() / 1000);
-      // if (now < Number(surveyData.startTime)) {
-      //   toast.error('Khảo sát chưa bắt đầu');
-      //   return;
-      // }
-
-      // if (now > Number(surveyData.endTime)) {
-      //   toast.error('Khảo sát đã kết thúc');
-      //   return;
-      // }
-
-      // if (Number(surveyData.targetRole) !== Number(userData.role)) {
-      //   toast.error(`Khảo sát này chỉ dành cho ${surveyData.targetRole === Role.PATIENT ? 'bệnh nhân' : 'bác sĩ'}`);
-      //   return;
-      // }
-
-      // Check if already completed
-      const hasCompleted = await contract.hasSurveyCompleted(surveyId, userAddress);
-      console.log('Has completed:', hasCompleted);
-      if (hasCompleted) {
-        toast.error('Bạn đã hoàn thành khảo sát này');
-        return;
-      }
-
-      // Prepare response data
-      const responseData = {
-        userId: userAddress,
-        timestamp: Math.floor(Date.now() / 1000),
-        answers: Object.values(answers)
-      };
-
-      // Update responses in IPFS
-      const updatedData = {
-        questions: survey.questions,
-        responses: [...survey.responses, responseData]
-      };
-
-      console.log('Uploading to IPFS:', updatedData);
-      const newIpfsHash = await uploadJson(JSON.stringify(updatedData));
-      console.log('New IPFS hash:', newIpfsHash);
-
-      // Submit survey response to blockchain
-      toast.info('Đang gửi câu trả lời...', {
-        autoClose: false,
-        toastId: 'submitting-survey'
-      });
-
-      console.log('Calling completeSurvey with:', {
-        surveyId,
-        newIpfsHash
-      });
+      console.log('User address:', userAddress);
 
       try {
-        // Estimate gas first to check for potential errors
+        // Get initial balance as BigInt
+        const initialBalance = await contract.getTokenBalance(userAddress);
+        console.log('Initial balance:', initialBalance.toString());
+
+        // Prepare and upload survey response
+        const responseData = {
+          userId: userAddress,
+          timestamp: Math.floor(Date.now() / 1000),
+          answers: Object.values(answers)
+        };
+
+        const updatedData = {
+          questions: survey.questions,
+          responses: [...survey.responses, responseData]
+        };
+
+        const newIpfsHash = await uploadJson(JSON.stringify(updatedData));
+        console.log('New IPFS hash:', newIpfsHash);
+
+        // Show progress toast
+        toast.info('Đang gửi câu trả lời...', {
+          autoClose: false,
+          toastId: 'submitting-survey'
+        });
+
+        // Submit transaction
         const gasEstimate = await contract.completeSurvey.estimateGas(surveyId, newIpfsHash);
         console.log('Gas estimate:', gasEstimate.toString());
 
         const tx = await contract.completeSurvey(surveyId, newIpfsHash, {
-          gasLimit: Math.floor(gasEstimate.toString() * 1.2) // Add 20% buffer
+          gasLimit: Math.floor(gasEstimate.toString() * 1.2)
         });
+
         console.log('Transaction sent:', tx.hash);
-        await tx.wait();
-        console.log('Transaction confirmed');
+        const receipt = await tx.wait(1);
+        console.log('Transaction receipt:', receipt);
 
-        toast.dismiss('submitting-survey');
-        toast.success('Gửi câu trả lời thành công!');
+        // Check events
+        if (receipt?.events) {
+          const transferEvents = receipt.events.filter(e => e.event === 'Transfer');
+          const surveyCompletedEvents = receipt.events.filter(e => e.event === 'SurveyCompleted');
+          
+          console.log('Transfer events found:', transferEvents.length);
+          console.log('SurveyCompleted events found:', surveyCompletedEvents.length);
 
-        // Navigate back to survey list
-        navigate('/surveys');
-      } catch (txError) {
-        console.error('Transaction error:', txError);
-        if (txError.data) {
-          // Try to decode the error
-          const errorMessage = txError.data.message || txError.message;
-          toast.error(`Lỗi giao dịch: ${errorMessage}`);
-        } else {
-          toast.error('Không thể hoàn thành giao dịch. Vui lòng thử lại sau.');
+          if (transferEvents.length > 0) {
+            const transferEvent = transferEvents[0];
+            console.log('Transfer event details:', {
+              from: transferEvent.args?.from,
+              to: transferEvent.args?.to,
+              amount: transferEvent.args?.amount?.toString()
+            });
+          }
         }
+
+        // Check final balance
+        const finalBalance = await contract.getTokenBalance(userAddress);
+        console.log('Final balance:', finalBalance.toString());
+
+        // Calculate difference using BigInt
+        const difference = finalBalance - initialBalance;
+        console.log('Balance difference:', difference.toString());
+
+        // Compare with expected reward
+        const expectedReward = BigInt(survey.reward);
+        console.log('Expected reward:', expectedReward.toString());
+        
+        const rewardReceived = difference === expectedReward;
+        console.log('Reward received correctly:', rewardReceived);
+
+        if (!rewardReceived) {
+          console.warn(
+            'Warning: Reward mismatch',
+            '\nExpected:', expectedReward.toString(),
+            '\nReceived:', difference.toString()
+          );
+        }
+
+        // Update UI balance
+        await fetchTokenBalance();
+
+        // Show success message
+        toast.dismiss('submitting-survey');
+        toast.success(
+          <div>
+            <p>Hoàn thành khảo sát thành công!</p>
+            <p className="text-sm mt-1">
+              Bạn đã nhận được {formatTokenAmount(survey.reward)} 
+              <CheckCircleIcon className="w-5 h-5 inline ml-1 text-green-500" />
+            </p>
+          </div>
+        );
+
+        // Navigate back
+        navigate('/surveys');
+
+      } catch (error) {
+        console.error('Error handling balance:', error);
+        toast.error('Có lỗi xảy ra khi kiểm tra số dư: ' + error.message);
       }
 
     } catch (error) {
       console.error('Error submitting survey:', error);
-      let errorMessage = 'Không thể gửi câu trả lời. ';
+      toast.dismiss('submitting-survey');
       
-      if (error.message.includes('Survey is not active')) {
-        errorMessage += 'Khảo sát này đã kết thúc.';
-      } else if (error.message.includes('Survey has not started')) {
-        errorMessage += 'Khảo sát chưa bắt đầu.';
-      } else if (error.message.includes('Survey has ended')) {
-        errorMessage += 'Khảo sát đã kết thúc.';
-      } else if (error.message.includes('Already completed this survey')) {
-        errorMessage += 'Bạn đã hoàn thành khảo sát này.';
-      } else if (error.message.includes('Not authorized for this survey')) {
-        errorMessage += 'Bạn không có quyền thực hiện khảo sát này.';
+      if (error.code === 'ACTION_REJECTED') {
+        toast.error('Bạn đã từ chối giao dịch');
       } else {
-        errorMessage += 'Vui lòng thử lại sau.';
+        toast.error('Có lỗi xảy ra khi gửi câu trả lời: ' + error.message);
       }
-      
-      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }

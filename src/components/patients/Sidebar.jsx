@@ -5,6 +5,7 @@ import {
   CalendarIcon,
   ChartBarIcon,
   DocumentTextIcon,
+  ArrowsRightLeftIcon,
 } from "@heroicons/react/24/outline";
 
 function Sidebar() {
@@ -34,6 +35,11 @@ function Sidebar() {
       name: "Khảo sát & Phần thưởng",
       icon: ChartBarIcon,
       path: "/surveys",
+    },
+    {
+      name: "Đổi HTC - ETH",
+      icon: ArrowsRightLeftIcon,
+      path: "/exchange",
     },
     {
       name: "Chia sẻ bệnh án",

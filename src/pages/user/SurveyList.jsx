@@ -9,7 +9,9 @@ import {
   CurrencyDollarIcon,
   ClockIcon,
   CheckCircleIcon,
+  ArrowsRightLeftIcon,
 } from '@heroicons/react/24/outline';
+import { ethers } from 'ethers';
 
 const Role = {
   NONE: 0,
@@ -26,6 +28,7 @@ export default function SurveyList() {
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState(null);
+  const [userTokens, setUserTokens] = useState(0);
 
   useEffect(() => {
     const init = async () => {
@@ -61,6 +64,12 @@ export default function SurveyList() {
     try {
       setLoading(true);
       setLoadingMessage('Đang tải danh sách khảo sát...');
+
+      // Get user token balance
+      const userAddress = await signer.getAddress();
+      const tokenBalance = await contract.getTokenBalance(userAddress);
+      setUserTokens(Number(ethers.formatEther(tokenBalance.toString())));
+
       const surveyCount = await contract.surveyCount();
       
       console.log('Total surveys:', Number(surveyCount));
@@ -199,9 +208,26 @@ export default function SurveyList() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Danh sách khảo sát</h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 mb-6">
             Thực hiện khảo sát để nhận token thưởng
           </p>
+
+          {/* Token balance and exchange link */}
+          <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center text-gray-600">
+                <CurrencyDollarIcon className="h-5 w-5 mr-2" />
+                <span>Số token đã nhận: <span className="font-medium text-indigo-600">{userTokens} HTC</span></span>
+              </div>
+              <button
+                onClick={() => navigate('/exchange')}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                <ArrowsRightLeftIcon className="h-5 w-5 mr-2" />
+                Đổi HTC sang ETH
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

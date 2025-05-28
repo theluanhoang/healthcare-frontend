@@ -5,15 +5,19 @@ import { ToastContainer } from "react-toastify";
 import App from "./App.jsx";
 import { AuthProvider } from "./contexts/AuthProvider.jsx";
 import { SmartContractProvider } from "./contexts/SmartContractProvider.jsx";
+import { TokenProvider } from "./contexts/TokenProvider.jsx";
 import "./index.css";
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <SmartContractProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <App />
-          <ToastContainer />
-        </BrowserRouter>
+        <TokenProvider>
+          <BrowserRouter>
+            <App />
+            <ToastContainer />
+          </BrowserRouter>
+        </TokenProvider>
       </AuthProvider>
     </SmartContractProvider>
   </StrictMode>
