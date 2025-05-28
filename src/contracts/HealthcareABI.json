@@ -900,6 +900,11 @@
         "internalType": "uint256",
         "name": "endTime",
         "type": "uint256"
+      },
+      {
+        "internalType": "enum Healthcare.Role",
+        "name": "targetRole",
+        "type": "uint8"
       }
     ],
     "name": "createSurvey",
@@ -1691,6 +1696,11 @@
         "internalType": "uint256",
         "name": "responseCount",
         "type": "uint256"
+      },
+      {
+        "internalType": "enum Healthcare.Role",
+        "name": "targetRole",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -2235,6 +2245,11 @@
         "internalType": "uint256",
         "name": "responseCount",
         "type": "uint256"
+      },
+      {
+        "internalType": "enum Healthcare.Role",
+        "name": "targetRole",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",

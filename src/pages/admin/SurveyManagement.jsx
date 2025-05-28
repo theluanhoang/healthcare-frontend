@@ -23,12 +23,20 @@ export default function SurveyManagement() {
   const [selectedSurvey, setSelectedSurvey] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState(null);
+
+  // Add Role enum mapping at the top of the component
+  const Role = {
+    NONE: 0,
+    PATIENT: 1,
+    DOCTOR: 2
+  };
+
   const initialFormData = {
     title: '',
     reward: '',
     startTime: '',
     endTime: '',
-    targetRole: 'PATIENT',
+    targetRole: Role.PATIENT, // Use enum value instead of string
     questions: [{ 
       id: 1, 
       text: '',
@@ -139,7 +147,7 @@ export default function SurveyManagement() {
           startTime: survey.startTime.toString(),
           endTime: survey.endTime.toString(),
           isActive: survey.isActive,
-          targetRole: survey.targetRole,
+          targetRole: Number(survey.targetRole), // Convert to number
           questions: cachedData.questions || []
         };
       }
@@ -169,7 +177,7 @@ export default function SurveyManagement() {
         startTime: survey.startTime.toString(),
         endTime: survey.endTime.toString(),
         isActive: survey.isActive,
-        targetRole: survey.targetRole,
+        targetRole: Number(survey.targetRole), // Convert to number
         questions
       };
     } catch (error) {
@@ -316,6 +324,17 @@ export default function SurveyManagement() {
         responses: []
       }));
 
+      // Ensure targetRole is a number
+      const targetRole = Number(formData.targetRole);
+      console.log('Creating survey with params:', {
+        title: formData.title,
+        ipfsHash,
+        reward: rewardInTokens,
+        startTime,
+        endTime,
+        targetRole
+      });
+
       // Create survey on blockchain with correct parameter order
       const tx = await contract.createSurvey(
         formData.title,
@@ -323,7 +342,7 @@ export default function SurveyManagement() {
         rewardInTokens,
         startTime,
         endTime,
-        formData.targetRole
+        targetRole // Pass the number value
       );
 
       toast.info('Đang tạo khảo sát...', {
@@ -399,8 +418,8 @@ export default function SurveyManagement() {
   // Add function to calculate survey statistics
   const calculateSurveyStats = () => {
     const now = Math.floor(Date.now() / 1000);
-    const patientSurveys = surveys.filter(s => s.targetRole === 'PATIENT');
-    const doctorSurveys = surveys.filter(s => s.targetRole === 'DOCTOR');
+    const patientSurveys = surveys.filter(s => Number(s.targetRole) === Role.PATIENT);
+    const doctorSurveys = surveys.filter(s => Number(s.targetRole) === Role.DOCTOR);
 
     return {
       total: surveys.length,
@@ -416,12 +435,12 @@ export default function SurveyManagement() {
   // Update the stats section in the render
   const stats = calculateSurveyStats();
 
-  // Add function to get role name
+  // Update the getRoleName function
   const getRoleName = (role) => {
-    switch (role) {
-      case 'PATIENT':
+    switch (Number(role)) { // Convert to number to handle both string and number inputs
+      case Role.PATIENT:
         return 'Bệnh nhân';
-      case 'DOCTOR':
+      case Role.DOCTOR:
         return 'Bác sĩ';
       default:
         return 'Không xác định';
@@ -538,7 +557,7 @@ export default function SurveyManagement() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {surveys
-              .filter(survey => survey.targetRole === 'PATIENT')
+              .filter(survey => Number(survey.targetRole) === Role.PATIENT)
               .map((survey) => {
                 const now = Math.floor(Date.now() / 1000);
                 const isExpired = Number(survey.endTime) < now;
@@ -630,7 +649,7 @@ export default function SurveyManagement() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {surveys
-              .filter(survey => survey.targetRole === 'DOCTOR')
+              .filter(survey => Number(survey.targetRole) === Role.DOCTOR)
               .map((survey) => {
                 const now = Math.floor(Date.now() / 1000);
                 const isExpired = Number(survey.endTime) < now;
@@ -719,194 +738,226 @@ export default function SurveyManagement() {
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setIsModalOpen(false)} />
-            <div className="relative bg-white rounded-lg w-full max-w-2xl mx-4 p-8">
-              <button
-                onClick={() => {
-                  resetForm();
-                  setIsModalOpen(false);
-                }}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-500"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
+            <div className="relative bg-white rounded-lg w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
+              {/* Modal Header */}
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-2xl font-bold">
+                  {selectedSurvey ? 'Chi tiết khảo sát' : 'Tạo khảo sát mới'}
+                </h2>
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
 
-              <h2 className="text-2xl font-bold mb-6">
-                {selectedSurvey ? 'Chi tiết khảo sát' : 'Tạo khảo sát mới'}
-              </h2>
+              {/* Modal Body - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                <form onSubmit={createSurvey} className="space-y-6">
+                  <div className="grid grid-cols-1 gap-6">
+                    {/* Basic Info Section */}
+                    <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Thông tin cơ bản</h3>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Tiêu đề khảo sát
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.title}
+                          onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="Nhập tiêu đề khảo sát"
+                          required
+                          readOnly={selectedSurvey !== null}
+                        />
+                      </div>
 
-              <form onSubmit={createSurvey} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tiêu đề khảo sát
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Nhập tiêu đề khảo sát"
-                    required
-                    readOnly={selectedSurvey !== null}
-                  />
-                </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Đối tượng khảo sát
+                        </label>
+                        <select
+                          value={formData.targetRole}
+                          onChange={(e) => setFormData(prev => ({ ...prev, targetRole: Number(e.target.value) }))}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          required
+                          disabled={selectedSurvey !== null}
+                        >
+                          <option value={Role.PATIENT}>Bệnh nhân</option>
+                          <option value={Role.DOCTOR}>Bác sĩ</option>
+                        </select>
+                      </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phần thưởng (HCT)
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.reward}
-                    onChange={(e) => setFormData(prev => ({ ...prev, reward: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Nhập số lượng token"
-                    min="0"
-                    step="0.1"
-                    required
-                    readOnly={selectedSurvey !== null}
-                  />
-                </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Phần thưởng (HCT)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.reward}
+                          onChange={(e) => setFormData(prev => ({ ...prev, reward: e.target.value }))}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="Nhập số lượng token"
+                          min="0"
+                          step="0.1"
+                          required
+                          readOnly={selectedSurvey !== null}
+                        />
+                      </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ngày bắt đầu
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.startTime}
-                      onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                      readOnly={selectedSurvey !== null}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ngày kết thúc
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.endTime}
-                      onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                      readOnly={selectedSurvey !== null}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Đối tượng khảo sát
-                  </label>
-                  <select
-                    value={formData.targetRole}
-                    onChange={(e) => setFormData(prev => ({ ...prev, targetRole: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                    disabled={selectedSurvey !== null}
-                  >
-                    <option value="PATIENT">Bệnh nhân</option>
-                    <option value="DOCTOR">Bác sĩ</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Danh sách câu hỏi
-                  </label>
-                  <div className="space-y-6">
-                    {formData.questions.map((question, index) => (
-                      <div key={question.id} className="bg-gray-50 p-4 rounded-lg">
-                        <div className="flex items-start space-x-4 mb-4">
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              value={question.text}
-                              onChange={(e) => updateQuestion(question.id, 'text', e.target.value)}
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                              placeholder={`Câu hỏi ${index + 1}`}
-                              required
-                              readOnly={selectedSurvey !== null}
-                            />
-                          </div>
-                          {!selectedSurvey && (
-                            <div className="flex items-center space-x-2">
-                              <select
-                                value={question.type}
-                                onChange={(e) => updateQuestion(question.id, 'type', e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                              >
-                                <option value="text">Câu trả lời tự do</option>
-                                <option value="multiple">Trắc nghiệm</option>
-                              </select>
-                              {formData.questions.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => removeQuestion(question.id)}
-                                  className="text-red-500 hover:text-red-700"
-                                >
-                                  <TrashIcon className="h-5 w-5" />
-                                </button>
-                              )}
-                            </div>
-                          )}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Ngày bắt đầu
+                          </label>
+                          <input
+                            type="date"
+                            value={formData.startTime}
+                            onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            required
+                            readOnly={selectedSurvey !== null}
+                          />
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Ngày kết thúc
+                          </label>
+                          <input
+                            type="date"
+                            value={formData.endTime}
+                            onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            required
+                            readOnly={selectedSurvey !== null}
+                          />
+                        </div>
+                      </div>
+                    </div>
 
-                        {/* Multiple choice options */}
-                        {question.type === 'multiple' && (
-                          <div className="ml-6 space-y-3">
-                            {question.options.map((option) => (
-                              <div key={option.id} className="flex items-center space-x-2">
+                    {/* Questions Section */}
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="flex items-center mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">Danh sách câu hỏi</h3>
+                      </div>
+
+                      <div className="space-y-4">
+                        {formData.questions.map((question, index) => (
+                          <div key={question.id} className="bg-white p-4 rounded-lg shadow-sm">
+                            <div className="flex flex-col space-y-4">
+                              {/* Question Header */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-500">Câu hỏi {index + 1}</span>
+                                <div className="flex items-center space-x-2">
+                                  {!selectedSurvey && (
+                                    <select
+                                      value={question.type}
+                                      onChange={(e) => updateQuestion(question.id, 'type', e.target.value)}
+                                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-50"
+                                    >
+                                      <option value="text">Câu trả lời tự do</option>
+                                      <option value="multiple">Trắc nghiệm</option>
+                                    </select>
+                                  )}
+                                  {!selectedSurvey && formData.questions.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeQuestion(question.id)}
+                                      className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                                    >
+                                      <TrashIcon className="h-5 w-5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Question Input */}
+                              <div className="relative">
                                 <input
                                   type="text"
-                                  value={option.text}
-                                  onChange={(e) => updateOption(question.id, option.id, e.target.value)}
-                                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                  placeholder={`Lựa chọn ${option.id}`}
+                                  value={question.text}
+                                  onChange={(e) => updateQuestion(question.id, 'text', e.target.value)}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                                  placeholder="Nhập nội dung câu hỏi"
                                   required
                                   readOnly={selectedSurvey !== null}
                                 />
-                                {!selectedSurvey && (
-                                  <button
-                                    type="button"
-                                    onClick={() => removeOption(question.id, option.id)}
-                                    className="text-red-500 hover:text-red-700"
-                                  >
-                                    <TrashIcon className="h-5 w-5" />
-                                  </button>
-                                )}
                               </div>
-                            ))}
-                            {!selectedSurvey && (
-                              <button
-                                type="button"
-                                onClick={() => addOption(question.id)}
-                                className="mt-2 inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50"
-                              >
-                                <PlusIcon className="h-4 w-4 mr-1" />
-                                Thêm lựa chọn
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {!selectedSurvey && (
-                    <button
-                      type="button"
-                      onClick={addQuestion}
-                      className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50"
-                    >
-                      <PlusIcon className="h-5 w-5 mr-2" />
-                      Thêm câu hỏi
-                    </button>
-                  )}
-                </div>
 
-                <div className="flex justify-end space-x-4 mt-8">
+                              {/* Multiple choice options */}
+                              {question.type === 'multiple' && (
+                                <div className="pl-4 space-y-3">
+                                  <div className="flex items-center">
+                                    <span className="text-sm font-medium text-gray-500 mb-2">Các lựa chọn</span>
+                                  </div>
+                                  {question.options.map((option, optionIndex) => (
+                                    <div key={option.id} className="flex items-center space-x-2">
+                                      <div className="flex items-center space-x-3 flex-1">
+                                        <span className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 text-sm">
+                                          {String.fromCharCode(65 + optionIndex)}
+                                        </span>
+                                        <input
+                                          type="text"
+                                          value={option.text}
+                                          onChange={(e) => updateOption(question.id, option.id, e.target.value)}
+                                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                                          placeholder={`Lựa chọn ${String.fromCharCode(65 + optionIndex)}`}
+                                          required
+                                          readOnly={selectedSurvey !== null}
+                                        />
+                                      </div>
+                                      {!selectedSurvey && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeOption(question.id, option.id)}
+                                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                                        >
+                                          <TrashIcon className="h-4 w-4" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  {!selectedSurvey && (
+                                    <button
+                                      type="button"
+                                      onClick={() => addOption(question.id)}
+                                      className="mt-2 inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-300 transition-colors duration-200"
+                                    >
+                                      <PlusIcon className="h-4 w-4 mr-1" />
+                                      Thêm lựa chọn
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Question Button */}
+                      {!selectedSurvey && (
+                        <div className="mt-6 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={addQuestion}
+                            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 hover:scale-105 shadow-sm"
+                          >
+                            <PlusIcon className="h-5 w-5 mr-2" />
+                            Thêm câu hỏi
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-gray-200">
+                <div className="flex justify-end space-x-4">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
@@ -917,13 +968,14 @@ export default function SurveyManagement() {
                   {!selectedSurvey && (
                     <button
                       type="submit"
+                      onClick={createSurvey}
                       className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                     >
                       Tạo khảo sát
                     </button>
                   )}
                 </div>
-              </form>
+              </div>
             </div>
           </div>
         )}
@@ -931,3 +983,30 @@ export default function SurveyManagement() {
     </div>
   );
 }
+
+// Add custom scrollbar styles to your CSS
+<style jsx>{`
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E0 #EDF2F7;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #EDF2F7;
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #CBD5E0;
+    border-radius: 3px;
+    border: 2px solid #EDF2F7;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #A0AEC0;
+  }
+`}</style>
