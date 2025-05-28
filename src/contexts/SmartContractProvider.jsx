@@ -1,7 +1,7 @@
 "use client";
 
 import { ethers } from "ethers";
-import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "react-toastify";
 import HealthcareABI from "../contracts/HealthcareABI.json";
 import { eventHandler } from "../utils/EventHandler";
@@ -9,7 +9,10 @@ import { initWebSocket, sendWebSocketMessage, closeWebSocket } from "../utils/we
 
 export const SmartContractContext = createContext();
 
-const contractAddress = "0xB2Bb3034FBb504459Abc272e20A324EdDA239267";
+const contractAddress = "0xEe35e1A29fb0Bc5575Be98f7471CcE475D84E2aB";
+const RETRY_DELAY = 2000; // 2 seconds
+const MAX_RETRIES = 3;
+const INIT_TIMEOUT = 10000; // 10 seconds
 
 export const SmartContractProvider = ({ children }) => {
   const [signer, setSigner] = useState(null);
@@ -25,8 +28,10 @@ export const SmartContractProvider = ({ children }) => {
   const [appointments, setAppointments] = useState([]);
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
   const [authorizedPatients, setAuthorizedPatients] = useState([]);
+  const initAttempts = useRef(0);
+  const initTimeoutId = useRef(null);
 
-  const initContract = useCallback(async () => {
+  const initContract = useCallback(async (retryCount = 0) => {
     if (!window.ethereum) {
       const errorMsg = "Vui lòng cài đặt MetaMask để tiếp tục.";
       setError(errorMsg);
@@ -34,39 +39,77 @@ export const SmartContractProvider = ({ children }) => {
       throw new Error(errorMsg);
     }
 
+    // Clear any existing timeout
+    if (initTimeoutId.current) {
+      clearTimeout(initTimeoutId.current);
+    }
+
+    // Set new timeout
+    const timeoutPromise = new Promise((_, reject) => {
+      initTimeoutId.current = setTimeout(() => {
+        reject(new Error("Khởi tạo hợp đồng quá thời gian"));
+      }, INIT_TIMEOUT);
+    });
+
     setIsLoading(true);
     try {
-      console.log("Khởi tạo hợp đồng...");
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const network = await provider.getNetwork();
-      if (network.chainId !== BigInt(1337)) {
-        const errorMsg = "Vui lòng chuyển MetaMask sang mạng Hardhat local (Chain ID: 1337).";
-        setError(errorMsg);
-        toast.error(errorMsg);
-        throw new Error(errorMsg);
+      console.log(`Khởi tạo hợp đồng... (lần thử ${retryCount + 1}/${MAX_RETRIES})`);
+      
+      // Race between initialization and timeout
+      await Promise.race([
+        (async () => {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const network = await provider.getNetwork();
+          
+          // Support both Hardhat local and other networks
+          if (network.chainId !== BigInt(1337) && network.chainId !== BigInt(31337)) {
+            throw new Error("Vui lòng chuyển MetaMask sang mạng Hardhat local (Chain ID: 1337 hoặc 31337).");
+          }
+
+          await provider.send("eth_requestAccounts", []);
+          const signer = await provider.getSigner();
+          const contractInstance = new ethers.Contract(contractAddress, HealthcareABI, signer);
+
+          // Test contract connection
+          await contractInstance.surveyCount();
+
+          setProvider(provider);
+          setSigner(signer);
+          setContract(contractInstance);
+          setError(null);
+
+          const address = await signer.getAddress();
+          setWalletAddress(address);
+
+          console.log("Khởi tạo hợp đồng hoàn tất.");
+          
+          // Reset retry counter on success
+          initAttempts.current = 0;
+        })(),
+        timeoutPromise
+      ]);
+
+    } catch (error) {
+      console.error("Lỗi khởi tạo hợp đồng:", error);
+      
+      // Increment retry counter
+      initAttempts.current = retryCount + 1;
+      
+      if (initAttempts.current < MAX_RETRIES) {
+        console.log(`Thử lại sau ${RETRY_DELAY}ms...`);
+        setTimeout(() => initContract(initAttempts.current), RETRY_DELAY);
+        return;
       }
 
-      await provider.send("eth_requestAccounts", []);
-      const signer = await provider.getSigner();
-      const contractInstance = new ethers.Contract(contractAddress, HealthcareABI, signer);
-
-      setProvider(provider);
-      setSigner(signer);
-      setContract(contractInstance);
-      setError(null);
-
-      const address = await signer.getAddress();
-      setWalletAddress(address);
-
-      console.log("Khởi tạo hợp đồng hoàn tất.");
-    } catch (error) {
-      console.error("Lỗi khởi tạo hợp đồng:", JSON.stringify(error, null, 2));
       const errorMsg = error.reason || error.message || "Không thể khởi tạo hợp đồng.";
       setError(errorMsg);
       toast.error(errorMsg);
       throw error;
     } finally {
       setIsLoading(false);
+      if (initTimeoutId.current) {
+        clearTimeout(initTimeoutId.current);
+      }
     }
   }, []);
 
@@ -1180,6 +1223,15 @@ export const SmartContractProvider = ({ children }) => {
       closeWebSocket();
     };
   }, [walletAddress, getPendingRecords, getMedicalRecordsByDoctor]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (initTimeoutId.current) {
+        clearTimeout(initTimeoutId.current);
+      }
+    };
+  }, []);
 
   const contextValue = useMemo(
     () => ({

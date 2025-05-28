@@ -10,15 +10,20 @@ const ipfsConfig = {
 
 const useIpfs = () => {
   const [ipfs, setIpfs] = useState(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const initIpfs = async () => {
       try {
         const client = create(ipfsConfig);
+        // Test IPFS connection
+        await client.id();
         setIpfs(client);
+        setIsReady(true);
         console.log("IPFS client initialized:", client);
       } catch (err) {
         console.error("IPFS initialization error:", err);
+        setIsReady(false);
         toast.error("Không thể khởi tạo IPFS client.");
       }
     };
@@ -147,7 +152,7 @@ const useIpfs = () => {
     }
   };
 
-  return { ipfs, uploadFile, uploadJson, getJson, getBinaryFile };
+  return { ipfs, uploadFile, uploadJson, getJson, getBinaryFile, isReady };
 };
 
 export default useIpfs;

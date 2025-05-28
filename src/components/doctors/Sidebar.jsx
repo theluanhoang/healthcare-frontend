@@ -7,9 +7,28 @@ import {
   DocumentTextIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { useSmartContract } from "../../hooks";
+import { useEffect, useState } from "react";
 
 function Sidebar() {
   const location = useLocation();
+  const { contract, signer } = useSmartContract();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!contract || !signer) return;
+      try {
+        const address = await signer.getAddress();
+        const owner = await contract.owner();
+        setIsAdmin(address.toLowerCase() === owner.toLowerCase());
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+      }
+    };
+
+    checkAdmin();
+  }, [contract, signer]);
 
   const isActive = (path) => {
     return location.pathname === path;
@@ -44,7 +63,7 @@ function Sidebar() {
     {
       name: "Khảo sát & Phần thưởng",
       icon: DocumentTextIcon,
-      path: "/surveys",
+      path: isAdmin ? "/admin/surveys" : "/surveys",
     },
   ];
 

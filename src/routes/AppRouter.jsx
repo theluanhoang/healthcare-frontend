@@ -19,6 +19,8 @@ import PatientShare from "../pages/PatientShare"
 import Register from "../pages/Register"
 import PatientDetail from "../pages/PatientDetail"
 import Surveys from "../pages/Surveys"
+import SurveyManagement from "../pages/admin/SurveyManagement"
+import ProtectedAdminRoute from "../components/ProtectedAdminRoute"
 
 function AppRoutes() {
   return (
@@ -43,6 +45,14 @@ function AppRoutes() {
       <Route path="/doctor/verify" element={<DoctorVerify />} />
       <Route path="/doctor/patient/:patientAddress" element={<PatientDetail />} />
       <Route path="/surveys" element={<Surveys />} />
+      <Route
+        path="/admin/surveys"
+        element={
+          <ProtectedAdminRoute>
+            <SurveyManagement />
+          </ProtectedAdminRoute>
+        }
+      />
     </Routes>
   )
 }
