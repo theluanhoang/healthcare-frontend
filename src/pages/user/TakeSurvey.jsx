@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSmartContract } from '../../hooks';
+import { useAuth } from '../../hooks';
 import useIpfs from '../../hooks/useIPFS';
 import { toast } from 'react-toastify';
 import {
@@ -9,11 +10,18 @@ import {
   ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 
+const Role = {
+  NONE: 0,
+  PATIENT: 1,
+  DOCTOR: 2
+};
+
 export default function TakeSurvey() {
   const { surveyId } = useParams();
   const navigate = useNavigate();
   const { contract, signer } = useSmartContract();
-  const { getJson, uploadJson } = useIpfs();
+  const { authState } = useAuth();
+  const { getJson, uploadJson, isReady } = useIpfs();
   const [survey, setSurvey] = useState(null);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -22,7 +30,20 @@ export default function TakeSurvey() {
 
   useEffect(() => {
     const fetchSurvey = async () => {
-      if (!contract || !signer) return;
+      if (!contract || !signer) {
+        setError('Vui lòng kết nối ví để tiếp tục');
+        return;
+      }
+
+      if (!isReady) {
+        setError('Đang khởi tạo IPFS...');
+        return;
+      }
+
+      if (!authState.role) {
+        setError('Vui lòng đăng nhập để tiếp tục');
+        return;
+      }
 
       try {
         setLoading(true);
@@ -34,8 +55,46 @@ export default function TakeSurvey() {
           return;
         }
 
+        // Log time values for debugging
+        const now = Math.floor(Date.now() / 1000);
+        const startTime = Number(surveyData.startTime);
+        const endTime = Number(surveyData.endTime);
+        console.log('Time values:', {
+          currentTime: now,
+          startTime: startTime,
+          endTime: endTime,
+          formattedCurrentTime: new Date(now * 1000).toLocaleString(),
+          formattedStartTime: new Date(startTime * 1000).toLocaleString(),
+          formattedEndTime: new Date(endTime * 1000).toLocaleString()
+        });
+
+        // Check survey time
+        if (now < startTime) {
+          setError(`Khảo sát sẽ bắt đầu vào ${new Date(startTime * 1000).toLocaleString()}`);
+          return;
+        }
+
+        if (now > endTime) {
+          setError('Khảo sát đã kết thúc');
+          return;
+        }
+
+        // Check if user is registered
+        const userAddress = await signer.getAddress();
+        const userData = await contract.users(userAddress);
+        if (userData.role === Role.NONE) {
+          setError('Vui lòng đăng ký tài khoản trước khi thực hiện khảo sát');
+          return;
+        }
+
+        // Check if user has the correct role
+        if (Number(surveyData.targetRole) !== Number(userData.role)) {
+          setError(`Khảo sát này chỉ dành cho ${surveyData.targetRole === Role.PATIENT ? 'bệnh nhân' : 'bác sĩ'}`);
+          return;
+        }
+
         // Check if user has already completed this survey
-        const hasCompleted = await contract.hasCompletedSurvey(surveyId);
+        const hasCompleted = await contract.hasSurveyCompleted(surveyId, userAddress);
         if (hasCompleted) {
           setError('Bạn đã hoàn thành khảo sát này');
           return;
@@ -51,7 +110,8 @@ export default function TakeSurvey() {
           reward: surveyData.reward.toString(),
           questions: parsedData.questions || [],
           responses: parsedData.responses || [],
-          ipfsHash: surveyData.ipfsHash
+          ipfsHash: surveyData.ipfsHash,
+          targetRole: Number(surveyData.targetRole)
         });
 
         // Initialize answers object
@@ -60,6 +120,7 @@ export default function TakeSurvey() {
           initialAnswers[index] = '';
         });
         setAnswers(initialAnswers);
+        setError(null);
 
       } catch (error) {
         console.error('Error fetching survey:', error);
@@ -70,7 +131,7 @@ export default function TakeSurvey() {
     };
 
     fetchSurvey();
-  }, [contract, signer, surveyId]);
+  }, [contract, signer, surveyId, isReady, authState.role]);
 
   const handleAnswerChange = (questionIndex, value) => {
     setAnswers(prev => ({
@@ -93,9 +154,64 @@ export default function TakeSurvey() {
         return;
       }
 
+      // Check user registration again before submitting
+      const userAddress = await signer.getAddress();
+      const userData = await contract.users(userAddress);
+      console.log('User data:', {
+        address: userAddress,
+        role: Number(userData.role),
+        isVerified: userData.isVerified
+      });
+
+      if (userData.role === Role.NONE) {
+        toast.error('Vui lòng đăng ký tài khoản trước khi thực hiện khảo sát');
+        return;
+      }
+
+      // Get latest survey data to check conditions
+      const surveyData = await contract.surveys(surveyId);
+      console.log('Survey data:', {
+        id: surveyId,
+        isActive: surveyData.isActive,
+        targetRole: Number(surveyData.targetRole),
+        startTime: Number(surveyData.startTime),
+        endTime: Number(surveyData.endTime),
+        currentTime: Math.floor(Date.now() / 1000)
+      });
+
+      // Validate survey conditions
+      if (!surveyData.isActive) {
+        toast.error('Khảo sát này không còn hoạt động');
+        return;
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      if (now < Number(surveyData.startTime)) {
+        toast.error('Khảo sát chưa bắt đầu');
+        return;
+      }
+
+      if (now > Number(surveyData.endTime)) {
+        toast.error('Khảo sát đã kết thúc');
+        return;
+      }
+
+      if (Number(surveyData.targetRole) !== Number(userData.role)) {
+        toast.error(`Khảo sát này chỉ dành cho ${surveyData.targetRole === Role.PATIENT ? 'bệnh nhân' : 'bác sĩ'}`);
+        return;
+      }
+
+      // Check if already completed
+      const hasCompleted = await contract.hasSurveyCompleted(surveyId, userAddress);
+      console.log('Has completed:', hasCompleted);
+      if (hasCompleted) {
+        toast.error('Bạn đã hoàn thành khảo sát này');
+        return;
+      }
+
       // Prepare response data
       const responseData = {
-        userId: await signer.getAddress(),
+        userId: userAddress,
         timestamp: Math.floor(Date.now() / 1000),
         answers: Object.values(answers)
       };
@@ -106,28 +222,68 @@ export default function TakeSurvey() {
         responses: [...survey.responses, responseData]
       };
 
-      // Upload updated data to IPFS
+      console.log('Uploading to IPFS:', updatedData);
       const newIpfsHash = await uploadJson(JSON.stringify(updatedData));
+      console.log('New IPFS hash:', newIpfsHash);
 
       // Submit survey response to blockchain
-      const tx = await contract.submitSurveyResponse(surveyId, newIpfsHash);
-      
       toast.info('Đang gửi câu trả lời...', {
         autoClose: false,
         toastId: 'submitting-survey'
       });
 
-      await tx.wait();
+      console.log('Calling completeSurvey with:', {
+        surveyId,
+        newIpfsHash
+      });
 
-      toast.dismiss('submitting-survey');
-      toast.success('Gửi câu trả lời thành công!');
+      try {
+        // Estimate gas first to check for potential errors
+        const gasEstimate = await contract.completeSurvey.estimateGas(surveyId, newIpfsHash);
+        console.log('Gas estimate:', gasEstimate.toString());
 
-      // Navigate back to survey list
-      navigate('/surveys');
+        const tx = await contract.completeSurvey(surveyId, newIpfsHash, {
+          gasLimit: Math.floor(gasEstimate.toString() * 1.2) // Add 20% buffer
+        });
+        console.log('Transaction sent:', tx.hash);
+        await tx.wait();
+        console.log('Transaction confirmed');
+
+        toast.dismiss('submitting-survey');
+        toast.success('Gửi câu trả lời thành công!');
+
+        // Navigate back to survey list
+        navigate('/surveys');
+      } catch (txError) {
+        console.error('Transaction error:', txError);
+        if (txError.data) {
+          // Try to decode the error
+          const errorMessage = txError.data.message || txError.message;
+          toast.error(`Lỗi giao dịch: ${errorMessage}`);
+        } else {
+          toast.error('Không thể hoàn thành giao dịch. Vui lòng thử lại sau.');
+        }
+      }
 
     } catch (error) {
       console.error('Error submitting survey:', error);
-      toast.error('Không thể gửi câu trả lời. Vui lòng thử lại sau.');
+      let errorMessage = 'Không thể gửi câu trả lời. ';
+      
+      if (error.message.includes('Survey is not active')) {
+        errorMessage += 'Khảo sát này đã kết thúc.';
+      } else if (error.message.includes('Survey has not started')) {
+        errorMessage += 'Khảo sát chưa bắt đầu.';
+      } else if (error.message.includes('Survey has ended')) {
+        errorMessage += 'Khảo sát đã kết thúc.';
+      } else if (error.message.includes('Already completed this survey')) {
+        errorMessage += 'Bạn đã hoàn thành khảo sát này.';
+      } else if (error.message.includes('Not authorized for this survey')) {
+        errorMessage += 'Bạn không có quyền thực hiện khảo sát này.';
+      } else {
+        errorMessage += 'Vui lòng thử lại sau.';
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }

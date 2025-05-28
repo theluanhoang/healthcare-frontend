@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSmartContract } from '../../hooks';
+import { useAuth } from '../../hooks';
 import useIpfs from '../../hooks/useIPFS';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -17,7 +18,8 @@ const Role = {
 };
 
 export default function SurveyList() {
-  const { contract, signer, userRole } = useSmartContract();
+  const { contract, signer } = useSmartContract();
+  const { authState } = useAuth();
   const { getJson, isReady } = useIpfs();
   const navigate = useNavigate();
   const [surveys, setSurveys] = useState([]);
@@ -38,6 +40,11 @@ export default function SurveyList() {
           return;
         }
 
+        if (!authState.role) {
+          setError('Vui lòng đăng nhập để xem khảo sát');
+          return;
+        }
+
         await fetchSurveys();
       } catch (error) {
         console.error('Initialization error:', error);
@@ -46,7 +53,7 @@ export default function SurveyList() {
     };
 
     init();
-  }, [contract, signer, isReady]);
+  }, [contract, signer, isReady, authState.role]);
 
   const fetchSurveys = async () => {
     if (!contract || !isReady) return;
@@ -55,6 +62,9 @@ export default function SurveyList() {
       setLoading(true);
       setLoadingMessage('Đang tải danh sách khảo sát...');
       const surveyCount = await contract.surveyCount();
+      
+      console.log('Total surveys:', Number(surveyCount));
+      console.log('User role:', Number(authState.role));
       
       const batchSize = 5;
       const surveys = [];
@@ -71,12 +81,24 @@ export default function SurveyList() {
       }
 
       // Filter surveys based on user role and active status
-      const filteredSurveys = surveys.filter(survey => 
-        survey.isActive && 
-        Number(survey.targetRole) === Number(userRole) &&
-        Number(survey.endTime) * 1000 > Date.now()
-      );
+      const filteredSurveys = surveys.filter(survey => {
+        const isActive = survey.isActive;
+        const matchesRole = Number(survey.targetRole) === Number(authState.role);
+        const notExpired = Number(survey.endTime) * 1000 > Date.now();
+        
+        console.log('Survey:', {
+          id: survey.id,
+          isActive,
+          surveyRole: Number(survey.targetRole),
+          userRole: Number(authState.role),
+          matchesRole,
+          notExpired
+        });
+        
+        return isActive && matchesRole && notExpired;
+      });
 
+      console.log('Filtered surveys:', filteredSurveys);
       setSurveys(filteredSurveys);
       setError(null);
     } catch (error) {
@@ -94,7 +116,7 @@ export default function SurveyList() {
       if (!survey.isActive) return null;
 
       // Check if user has already completed this survey
-      const hasCompleted = await contract.hasCompletedSurvey(id);
+      const hasCompleted = await contract.hasSurveyCompleted(id, await signer.getAddress());
       if (hasCompleted) return null;
 
       const jsonData = await getJson(survey.ipfsHash);

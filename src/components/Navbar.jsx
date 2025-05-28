@@ -14,6 +14,7 @@ export const menuItems = {
     { path: "/patient/records", label: "Hồ sơ y tế" },
     { path: "/patient/appointment", label: "Lịch hẹn" },
     { path: "/patient/share", label: "Chia sẻ dữ liệu" },
+    { path: "/surveys", label: "Khảo sát" },
   ],
   doctor: [
     { path: "/doctor/profile", label: "Hồ sơ" },
@@ -23,6 +24,7 @@ export const menuItems = {
     { path: "/doctor/records", label: "Hồ sơ y tế" },
     { path: "/doctor/schedule", label: "Lịch khám" },
     { path: "/doctor/analysis", label: "Phân tích" },
+    { path: "/surveys", label: "Khảo sát" },
   ],
 };
 
